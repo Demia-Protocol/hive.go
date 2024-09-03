@@ -3,9 +3,8 @@
 package rocksdb
 
 import (
-	"fmt"
-
 	"github.com/iotaledger/grocksdb"
+	"github.com/iotaledger/hive.go/ierrors"
 	"github.com/iotaledger/hive.go/runtime/ioutils"
 )
 
@@ -19,9 +18,8 @@ type RocksDB struct {
 
 // CreateDB creates a new RocksDB instance.
 func CreateDB(directory string, options ...Option) (*RocksDB, error) {
-
-	if err := ioutils.CreateDirectory(directory, 0700); err != nil {
-		return nil, fmt.Errorf("could not create directory: %w", err)
+	if err := ioutils.CreateDirectory(directory, 0o700); err != nil {
+		return nil, ierrors.Wrapf(err, "could not create directory '%s'", directory)
 	}
 
 	dbOpts := dbOptions(options)
@@ -41,7 +39,7 @@ func CreateDB(directory string, options ...Option) (*RocksDB, error) {
 		var err error
 		opts, err = grocksdb.GetOptionsFromString(opts, str)
 		if err != nil {
-			return nil, err
+			return nil, ierrors.Wrapf(err, "could not get options from string '%s'", str)
 		}
 	}
 
@@ -54,9 +52,15 @@ func CreateDB(directory string, options ...Option) (*RocksDB, error) {
 
 	fo := grocksdb.NewDefaultFlushOptions()
 
+	if dbOpts.blockCacheSize != 0 {
+		bbto := grocksdb.NewDefaultBlockBasedTableOptions()
+		bbto.SetBlockCache(grocksdb.NewLRUCache(dbOpts.blockCacheSize))
+		opts.SetBlockBasedTableFactory(bbto)
+	}
+
 	db, err := grocksdb.OpenDb(opts, directory)
 	if err != nil {
-		return nil, err
+		return nil, ierrors.Wrapf(err, "could not open new DB '%s'", directory)
 	}
 
 	return &RocksDB{
@@ -69,7 +73,6 @@ func CreateDB(directory string, options ...Option) (*RocksDB, error) {
 
 // OpenDBReadOnly opens a new RocksDB instance in read-only mode.
 func OpenDBReadOnly(directory string, options ...Option) (*RocksDB, error) {
-
 	dbOpts := dbOptions(options)
 
 	opts := grocksdb.NewDefaultOptions()

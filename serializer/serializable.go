@@ -5,7 +5,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"sort"
+
+	"github.com/iotaledger/hive.go/ierrors"
 )
 
 // Serializable is something which knows how to serialize/deserialize itself from/into bytes
@@ -121,23 +122,23 @@ type ArrayRules struct {
 	Min uint
 	// The max array bound.
 	Max uint
-	// A map of types which must occur within the array.
+	// A map of object types which must occur within the array.
+	// This is only checked on slices of types with an object type set.
+	// In particular, this means this is not checked for byte slices.
 	MustOccur TypePrefixes
 	// The guards applied while de/serializing Serializables.
 	Guards SerializableGuard
 	// The mode of validation.
 	ValidationMode ArrayValidationMode
-	// The slice reduction function for uniqueness checks.
-	UniquenessSliceFunc ElementUniquenessSliceFunc
 }
 
 // CheckBounds checks whether the given count violates the array bounds.
 func (ar *ArrayRules) CheckBounds(count uint) error {
 	if ar.Min != 0 && count < ar.Min {
-		return fmt.Errorf("%w: min is %d but count is %d", ErrArrayValidationMinElementsNotReached, ar.Min, count)
+		return ierrors.Wrapf(ErrArrayValidationMinElementsNotReached, "min is %d but count is %d", ar.Min, count)
 	}
 	if ar.Max != 0 && count > ar.Max {
-		return fmt.Errorf("%w: max is %d but count is %d", ErrArrayValidationMaxElementsExceeded, ar.Max, count)
+		return ierrors.Wrapf(ErrArrayValidationMaxElementsExceeded, "max is %d but count is %d", ar.Max, count)
 	}
 
 	return nil
@@ -158,12 +159,9 @@ func (ar *ArrayRules) ElementUniqueValidator() ElementValidationFunc {
 	set := map[string]int{}
 
 	return func(index int, next []byte) error {
-		if ar.UniquenessSliceFunc != nil {
-			next = ar.UniquenessSliceFunc(next)
-		}
 		k := string(next)
 		if j, has := set[k]; has {
-			return fmt.Errorf("%w: element %d and %d are duplicates", ErrArrayValidationViolatesUniqueness, j, index)
+			return ierrors.Wrapf(ErrArrayValidationViolatesUniqueness, "element %d and %d are duplicates", j, index)
 		}
 		set[k] = index
 
@@ -183,7 +181,7 @@ func (ar *ArrayRules) LexicalOrderValidator() ElementValidationFunc {
 			prev = next
 			prevIndex = index
 		case bytes.Compare(prev, next) > 0:
-			return fmt.Errorf("%w: element %d should have been before element %d", ErrArrayValidationOrderViolatesLexicalOrder, index, prevIndex)
+			return ierrors.Wrapf(ErrArrayValidationOrderViolatesLexicalOrder, "element %d should have been before element %d", index, prevIndex)
 		default:
 			prev = next
 			prevIndex = index
@@ -202,31 +200,18 @@ func (ar *ArrayRules) LexicalOrderWithoutDupsValidator() ElementValidationFunc {
 	return func(index int, next []byte) error {
 		if prev == nil {
 			prevIndex = index
-			if ar.UniquenessSliceFunc != nil {
-				prev = ar.UniquenessSliceFunc(next)
-
-				return nil
-			}
 			prev = next
 
 			return nil
 		}
-		if ar.UniquenessSliceFunc != nil {
-			next = ar.UniquenessSliceFunc(next)
-		}
 		switch bytes.Compare(prev, next) {
 		case 1:
-			return fmt.Errorf("%w: element %d should have been before element %d", ErrArrayValidationOrderViolatesLexicalOrder, index, prevIndex)
+			return ierrors.Wrapf(ErrArrayValidationOrderViolatesLexicalOrder, "element %d should have been before element %d", index, prevIndex)
 		case 0:
 			// dup
-			return fmt.Errorf("%w: element %d and %d are duplicates", ErrArrayValidationViolatesUniqueness, index, prevIndex)
+			return ierrors.Wrapf(ErrArrayValidationViolatesUniqueness, "element %d and %d are duplicates", index, prevIndex)
 		}
 		prevIndex = index
-		if ar.UniquenessSliceFunc != nil {
-			prev = ar.UniquenessSliceFunc(next)
-
-			return nil
-		}
 		prev = next
 
 		return nil
@@ -243,12 +228,12 @@ func (ar *ArrayRules) AtMostOneOfEachTypeValidator(typeDenotation TypeDenotation
 		switch typeDenotation {
 		case TypeDenotationUint32:
 			if len(next) < UInt32ByteSize {
-				return fmt.Errorf("%w: not enough bytes to check type uniquness in array", ErrInvalidBytes)
+				return ierrors.Wrap(ErrInvalidBytes, "not enough bytes to check type uniquness in array")
 			}
 			key = binary.LittleEndian.Uint32(next)
 		case TypeDenotationByte:
 			if len(next) < OneByte {
-				return fmt.Errorf("%w: not enough bytes to check type uniquness in array", ErrInvalidBytes)
+				return ierrors.Wrap(ErrInvalidBytes, "not enough bytes to check type uniquness in array")
 			}
 			key = uint32(next[0])
 		default:
@@ -256,7 +241,7 @@ func (ar *ArrayRules) AtMostOneOfEachTypeValidator(typeDenotation TypeDenotation
 		}
 		prevIndex, has := seen[key]
 		if has {
-			return fmt.Errorf("%w: element %d and %d have the same type", ErrArrayValidationViolatesTypeUniqueness, index, prevIndex)
+			return ierrors.Wrapf(ErrArrayValidationViolatesTypeUniqueness, "element %d and %d have the same type", index, prevIndex)
 		}
 		seen[key] = index
 
@@ -337,25 +322,34 @@ func (l LexicalOrdered32ByteArrays) Swap(i, j int) {
 	l[i], l[j] = l[j], l[i]
 }
 
-// RemoveDupsAndSortByLexicalOrderArrayOf32Bytes returns a new SliceOfArraysOf32Bytes sorted by lexical order and without duplicates.
-func RemoveDupsAndSortByLexicalOrderArrayOf32Bytes(slice SliceOfArraysOf32Bytes) SliceOfArraysOf32Bytes {
-	seen := make(map[string]struct{})
-	orderedArray := make(LexicalOrdered32ByteArrays, len(slice))
+// LexicalOrdered36ByteArrays are 36 byte arrays ordered in lexical order.
+type LexicalOrdered36ByteArrays [][36]byte
 
-	uniqueElements := 0
-	for _, v := range slice {
-		k := string(v[:])
-		if _, has := seen[k]; has {
-			continue
-		}
-		seen[k] = struct{}{}
-		orderedArray[uniqueElements] = v
-		uniqueElements++
-	}
-	orderedArray = orderedArray[:uniqueElements]
-	sort.Sort(orderedArray)
+func (l LexicalOrdered36ByteArrays) Len() int {
+	return len(l)
+}
 
-	return orderedArray
+func (l LexicalOrdered36ByteArrays) Less(i, j int) bool {
+	return bytes.Compare(l[i][:], l[j][:]) < 0
+}
+
+func (l LexicalOrdered36ByteArrays) Swap(i, j int) {
+	l[i], l[j] = l[j], l[i]
+}
+
+// LexicalOrdered40ByteArrays are 40 byte arrays ordered in lexical order.
+type LexicalOrdered40ByteArrays [][40]byte
+
+func (l LexicalOrdered40ByteArrays) Len() int {
+	return len(l)
+}
+
+func (l LexicalOrdered40ByteArrays) Less(i, j int) bool {
+	return bytes.Compare(l[i][:], l[j][:]) < 0
+}
+
+func (l LexicalOrdered40ByteArrays) Swap(i, j int) {
+	l[i], l[j] = l[j], l[i]
 }
 
 // SortedSerializables are Serializables sorted by their serialized form.

@@ -3,14 +3,17 @@ package kvstore
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
+	"github.com/iotaledger/hive.go/ierrors"
 )
 
 var (
 	// ErrKeyNotFound is returned when an op. doesn't find the given key.
-	ErrKeyNotFound = errors.New("key not found")
+	ErrKeyNotFound = ierrors.New("key not found")
+	// ErrTypedValueNotChanged is a sentinel error that can be returned by the TypedValue.Compute callback to indicate
+	// that the current value should not be changed.
+	ErrTypedValueNotChanged = ierrors.New("typed value not changed")
 	// ErrStoreClosed is returned when an op accesses the kvstore but it was already closed.
-	ErrStoreClosed = errors.New("trying to access closed kvstore")
+	ErrStoreClosed = ierrors.New("trying to access closed kvstore")
 
 	EmptyPrefix = KeyPrefix{}
 )
@@ -121,7 +124,6 @@ func GetIterDirection(iterDirection ...IterDirection) IterDirection {
 
 // Copy copies the content from the source to the target KVStore.
 func Copy(source KVStore, target KVStore) error {
-
 	var innerErr error
 	if err := source.Iterate(EmptyPrefix, func(key, value Value) bool {
 		if err := target.Set(key, value); err != nil {
@@ -143,7 +145,6 @@ func Copy(source KVStore, target KVStore) error {
 // CopyBatched copies the content from the source to the target KVStore in batches.
 // If batchSize is not specified, everything is copied in a single batch.
 func CopyBatched(source KVStore, target KVStore, batchSize ...int) error {
-
 	batchedSize := 0
 	if len(batchSize) > 0 {
 		batchedSize = batchSize[0]

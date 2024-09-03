@@ -8,6 +8,7 @@ import (
 
 	"github.com/iotaledger/hive.go/ds/orderedmap"
 	"github.com/iotaledger/hive.go/lo"
+	"github.com/iotaledger/hive.go/runtime/options"
 	"github.com/iotaledger/hive.go/runtime/syncutils"
 )
 
@@ -48,8 +49,13 @@ func (g *Group) Name() (name string) {
 }
 
 // CreatePool creates a new WorkerPool with the given name and returns it.
-func (g *Group) CreatePool(name string, optWorkerCount ...int) *WorkerPool {
-	pool := New(name, optWorkerCount...)
+func (g *Group) CreatePool(name string, opts ...options.Option[WorkerPool]) *WorkerPool {
+	workerPoolOpts := []options.Option[WorkerPool]{
+		WithCancelPendingTasksOnShutdown(true),
+	}
+	workerPoolOpts = append(workerPoolOpts, opts...)
+
+	pool := New(name, workerPoolOpts...)
 	pool.PendingTasksCounter.Subscribe(func(oldValue, newValue int) {
 		if oldValue == 0 {
 			g.PendingChildrenCounter.Increase()
@@ -83,6 +89,7 @@ func (g *Group) Pools() map[string]*WorkerPool {
 		for name, pool := range group.Pools() {
 			pools[fmt.Sprintf("%s.%s", g.name, name)] = pool
 		}
+
 		return true
 	})
 
@@ -190,6 +197,7 @@ func (g *Group) poolsString(indent int) string {
 		if currentValue := value.PendingTasksCounter.Get(); currentValue > 0 {
 			result += strings.Repeat(indentStr, indent) + "- " + key + " (" + strconv.Itoa(currentValue) + " pending tasks)\n"
 		}
+
 		return true
 	})
 
@@ -199,6 +207,7 @@ func (g *Group) poolsString(indent int) string {
 // groupsString returns a human-readable representation of the Groups of the Group with the given indentation.
 func (g *Group) groupsString(indent int) string {
 	result := ""
+	//nolint:revive // better be explicit here
 	g.groups.ForEach(func(key string, value *Group) bool {
 		result += value.string(indent)
 		return true
@@ -214,7 +223,7 @@ func (g *Group) shutdown() {
 	}
 
 	g.pools.ForEach(func(_ string, pool *WorkerPool) bool {
-		pool.Shutdown(true)
+		pool.Shutdown()
 		return true
 	})
 

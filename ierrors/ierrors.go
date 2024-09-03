@@ -1,6 +1,8 @@
 // ierrors package provides a wrapper around the "errors" package from the standard library of Go.
 // It enhances error handling by adding additional error creation and manipulation functions.
 // This package also supports stacktraces when the "stacktrace" build tag is added.
+//
+//nolint:goerr113
 package ierrors
 
 import (
@@ -62,14 +64,4 @@ func Is(err, target error) bool {
 // error, or to any interface type.
 func As(err error, target any) bool {
 	return errors.As(err, target)
-}
-
-// Join returns an error that wraps the given errors.
-// Any nil error values are discarded.
-// Join returns nil if errs contains no non-nil values.
-// The error formats as the concatenation of the strings obtained
-// by calling the Error method of each element of errs, with a newline
-// between each string.
-func Join(errs ...error) error {
-	return errors.Join(errs...)
 }

@@ -1,7 +1,6 @@
 package parameter
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -9,17 +8,18 @@ import (
 	flag "github.com/spf13/pflag"
 
 	"github.com/iotaledger/hive.go/app/configuration"
+	"github.com/iotaledger/hive.go/ierrors"
 )
 
 var (
-	ErrUnknownEntryType = errors.New("unknown entry type")
+	ErrUnknownEntryType = ierrors.New("unknown entry type")
 )
 
 //nolint:revive // better be explicit here
 type ParameterGroup struct {
 	Parameters []*Parameter
 	SubGroups  []*ParameterGroup
-	Entries    []interface{}
+	Entries    []any
 	Name       string
 	BaseName   string
 	Level      int
@@ -62,7 +62,6 @@ func addGroup(groupsMap map[string]*ParameterGroup, groups []*ParameterGroup, ba
 }
 
 func analyzeBoundParameter(groupsMap map[string]*ParameterGroup, groups []*ParameterGroup, boundParam *configuration.BoundParameter, baseName string, name string, level int) []*ParameterGroup {
-
 	if strings.Contains(name, ".") {
 		// name still contains a separator => create a group and walk deeper
 		groupName, keyName, _ := strings.Cut(name, ".")
@@ -88,7 +87,7 @@ func analyzeBoundParameter(groupsMap map[string]*ParameterGroup, groups []*Param
 				var groupBaseName string
 				groups, groupBaseName = addGroup(groupsMap, groups, baseName, name, level, boundParam.DefaultVal)
 
-				for i := 0; i < elem.NumField(); i++ {
+				for i := range elem.NumField() {
 					valueField := elem.Field(i)
 					typeField := elem.Type().Field(i)
 
@@ -108,7 +107,6 @@ func analyzeBoundParameter(groupsMap map[string]*ParameterGroup, groups []*Param
 }
 
 func ParseConfigParameterGroups(config *configuration.Configuration, flagset *flag.FlagSet, ignoreFlags map[string]struct{}) []*ParameterGroup {
-
 	configKeys := config.Koanf().All()
 
 	flagset.SortFlags = false
@@ -134,7 +132,6 @@ func ParseConfigParameterGroups(config *configuration.Configuration, flagset *fl
 
 	// analyze all missing parameters
 	for key := range configKeys {
-
 		if _, ignore := ignoreFlags[strings.ToLower(key)]; ignore {
 			continue
 		}

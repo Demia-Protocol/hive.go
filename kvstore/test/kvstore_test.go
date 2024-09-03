@@ -1,4 +1,3 @@
-//nolint:scopelint // we don't care about these linters in test cases
 package test
 
 import (
@@ -11,10 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/iotaledger/hive.go/kvstore"
-	"github.com/iotaledger/hive.go/kvstore/badger"
 	"github.com/iotaledger/hive.go/kvstore/debug"
 	"github.com/iotaledger/hive.go/kvstore/mapdb"
-	"github.com/iotaledger/hive.go/kvstore/pebble"
 	"github.com/iotaledger/hive.go/kvstore/rocksdb"
 )
 
@@ -33,22 +30,8 @@ var (
 func testStore(t *testing.T, dbImplementation string, realm []byte) (kvstore.KVStore, error) {
 	switch dbImplementation {
 
-	case "badger":
-		dir := t.TempDir()
-		db, err := badger.CreateDB(dir)
-		require.NoError(t, err, "used db: %s", dbImplementation)
-
-		return badger.New(db).WithRealm(realm)
-
 	case "mapDB":
 		return mapdb.NewMapDB().WithRealm(realm)
-
-	case "pebble":
-		dir := t.TempDir()
-		db, err := pebble.CreateDB(dir)
-		require.NoError(t, err, "used db: %s", dbImplementation)
-
-		return pebble.New(db).WithRealm(realm)
 
 	case "rocksdb":
 		dir := t.TempDir()

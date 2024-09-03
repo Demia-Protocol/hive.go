@@ -1,12 +1,12 @@
 package ed25519
 
 import (
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/binary"
 
 	"github.com/mr-tron/base58"
-	"github.com/oasisprotocol/ed25519"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -44,6 +44,7 @@ func (seed *Seed) KeyPair(n uint64) (keyPair *KeyPair) {
 	keyPair = &KeyPair{}
 
 	privateKey := ed25519.NewKeyFromSeed(seed.subSeed(n))
+	//nolint:forcetypeassert // false positive, we know it's an ed25519.PublicKey
 	publicKey := privateKey.Public().(ed25519.PublicKey)
 
 	copy(keyPair.PrivateKey[:], privateKey)

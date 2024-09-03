@@ -1,13 +1,14 @@
 package configuration
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/maps"
 	"github.com/knadh/koanf/providers/posflag"
 	"github.com/spf13/pflag"
+
+	"github.com/iotaledger/hive.go/ierrors"
 )
 
 // lowerPosflag implements a pflag command line provider.
@@ -24,7 +25,7 @@ type lowerPosflag struct {
 // to `{parent: {child: {key: 1}}}`.
 //
 // It takes an optional (but recommended) Koanf instance to see if the
-// the flags defined have been set from other providers, for instance,
+// flags defined have been set from other providers, for instance,
 // a config file. If they are not, then the default values of the flags
 // are merged. If they do exist, the flag values are not merged but only
 // the values that have been explicitly set in the command line are merged.
@@ -60,12 +61,12 @@ func (p *lowerPosflag) Read() (map[string]interface{}, error) {
 
 // ReadBytes is not supported by the env koanf.
 func (p *lowerPosflag) ReadBytes() ([]byte, error) {
-	return nil, errors.New("pflag provider does not support this method")
+	return nil, ierrors.New("pflag provider does not support this method")
 }
 
 // Watch is not supported.
 //
 //nolint:revive
 func (p *lowerPosflag) Watch(cb func(event interface{}, err error)) error {
-	return errors.New("posflag provider does not support this method")
+	return ierrors.New("posflag provider does not support this method")
 }

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/iotaledger/hive.go/ds/shrinkingmap"
+	"github.com/iotaledger/hive.go/runtime/options"
 )
 
 // region TaskExecutor ////////////////////////////////////////////////////////////////////////////////////////////
@@ -13,15 +14,15 @@ import (
 // identifier. It allows to replace existing scheduled tasks and cancel them using the same identifier.
 type TaskExecutor[T comparable] struct {
 	*Executor
-	queuedElements      *shrinkingmap.ShrinkingMap[T, *QueueElement]
+	queuedElements      *shrinkingmap.ShrinkingMap[T, *QueueElement[func()]]
 	queuedElementsMutex sync.Mutex
 }
 
 // NewTaskExecutor is the constructor of the TaskExecutor.
-func NewTaskExecutor[T comparable](workerCount int) *TaskExecutor[T] {
+func NewTaskExecutor[T comparable](workerCount int, opts ...options.Option[Executor]) *TaskExecutor[T] {
 	return &TaskExecutor[T]{
-		Executor:       NewExecutor(workerCount),
-		queuedElements: shrinkingmap.New[T, *QueueElement](),
+		Executor:       NewExecutor(workerCount, opts...),
+		queuedElements: shrinkingmap.New[T, *QueueElement[func()]](),
 	}
 }
 
@@ -35,22 +36,24 @@ func (t *TaskExecutor[T]) ExecuteAt(identifier T, callback func(), executionTime
 	t.queuedElementsMutex.Lock()
 	defer t.queuedElementsMutex.Unlock()
 
-	queuedElement, queuedElementExists := t.queuedElements.Get(identifier)
-	if queuedElementExists {
+	if queuedElement, queuedElementExists := t.queuedElements.Get(identifier); queuedElementExists {
 		queuedElement.Cancel()
 	}
 
-	t.queuedElements.Set(identifier, t.Executor.ExecuteAt(func() {
+	scheduledTask := t.Executor.ExecuteAt(func() {
 		callback()
 
 		t.queuedElementsMutex.Lock()
 		defer t.queuedElementsMutex.Unlock()
 
 		t.queuedElements.Delete(identifier)
-	}, executionTime))
+	}, executionTime)
 
-	queuedElement, _ = t.queuedElements.Get(identifier)
-	return queuedElement
+	if scheduledTask != nil {
+		t.queuedElements.Set(identifier, scheduledTask)
+	}
+
+	return scheduledTask
 }
 
 // Cancel cancels a queued task.

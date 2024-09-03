@@ -1,15 +1,16 @@
-//nolint:nosnakecase // os package uses underlines in constants
 package ioutils
 
 import (
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 
 	"github.com/pelletier/go-toml/v2"
+	"gopkg.in/yaml.v3"
+
+	"github.com/iotaledger/hive.go/ierrors"
 )
 
 // PathExists returns whether the given file or directory exists.
@@ -35,7 +36,7 @@ func CreateDirectory(dir string, perm os.FileMode) error {
 
 	if exists {
 		if !isDir {
-			return fmt.Errorf("given path is a file instead of a directory %s", dir)
+			return ierrors.Errorf("given path is a file instead of a directory %s", dir)
 		}
 
 		return nil
@@ -46,7 +47,6 @@ func CreateDirectory(dir string, perm os.FileMode) error {
 
 // FolderSize returns the size of a folder.
 func FolderSize(target string) (int64, error) {
-
 	var size int64
 
 	err := filepath.Walk(target, func(_ string, info os.FileInfo, err error) error {
@@ -66,8 +66,8 @@ func FolderSize(target string) (int64, error) {
 
 // ReadFromFile reads structured binary data from the file named by filename to data.
 // A successful call returns err == nil, not err == EOF.
-// ReadFromFile uses binary.Read to decode data. Data must be a pointer to a fixed-size value or a slice
-// of fixed-size values.
+// ReadFromFile uses binary.Read to decode data.
+// Data must be a pointer to a fixed-size value or a slice of fixed-size values.
 func ReadFromFile(filename string, data interface{}) error {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -81,8 +81,8 @@ func ReadFromFile(filename string, data interface{}) error {
 // WriteToFile writes the binary representation of data to a file named by filename.
 // If the file does not exist, WriteFile creates it with permissions perm
 // (before umask); otherwise WriteFile truncates it before writing, without changing permissions.
-// WriteToFile uses binary.Write to encode data. Data must be a pointer to a fixed-size value or a slice
-// of fixed-size values.
+// WriteToFile uses binary.Write to encode data.
+// Data must be a pointer to a fixed-size value or a slice of fixed-size values.
 func WriteToFile(filename string, data interface{}, perm os.FileMode) (err error) {
 	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
@@ -98,8 +98,8 @@ func WriteToFile(filename string, data interface{}, perm os.FileMode) (err error
 }
 
 // ReadJSONFromFile reads JSON data from the file named by filename to data.
-// ReadJSONFromFile uses json.Unmarshal to decode data. Data must be a pointer to a fixed-size value or a slice
-// of fixed-size values.
+// ReadJSONFromFile uses json.Unmarshal to decode data.
+// Data must be a pointer to a fixed-size value or a slice of fixed-size values.
 func ReadJSONFromFile(filename string, data interface{}) error {
 	jsonData, err := os.ReadFile(filename)
 	if err != nil {
@@ -112,8 +112,8 @@ func ReadJSONFromFile(filename string, data interface{}) error {
 // WriteJSONToFile writes the JSON representation of data to a file named by filename.
 // If the file does not exist, WriteJSONToFile creates it with permissions perm
 // (before umask); otherwise WriteJSONToFile truncates it before writing, without changing permissions.
-// WriteJSONToFile uses json.MarshalIndent to encode data. Data must be a pointer to a fixed-size value or a slice
-// of fixed-size values.
+// WriteJSONToFile uses json.MarshalIndent to encode data.
+// Data must be a pointer to a fixed-size value or a slice of fixed-size values.
 func WriteJSONToFile(filename string, data interface{}, perm os.FileMode) (err error) {
 	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
@@ -128,23 +128,69 @@ func WriteJSONToFile(filename string, data interface{}, perm os.FileMode) (err e
 
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return fmt.Errorf("unable to marshal data to JSON: %w", err)
+		return ierrors.Wrap(err, "unable to marshal data to JSON")
 	}
 
 	if _, err := f.Write(jsonData); err != nil {
-		return fmt.Errorf("unable to write JSON data to %s: %w", filename, err)
+		return ierrors.Wrapf(err, "unable to write JSON data to %s", filename)
 	}
 
 	if err := f.Sync(); err != nil {
-		return fmt.Errorf("unable to fsync file content to %s: %w", filename, err)
+		return ierrors.Wrapf(err, "unable to fsync file content to %s", filename)
+	}
+
+	return nil
+}
+
+// ReadYAMLFromFile reads YAML data from the file named by filename to data.
+// ReadYAMLFromFile uses yaml.Unmarshal to decode data.
+// Data must be a pointer to a fixed-size value or a slice of fixed-size values.
+func ReadYAMLFromFile(filename string, data interface{}) error {
+	yamlData, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	return yaml.Unmarshal(yamlData, data)
+}
+
+// WriteYAMLToFile writes the YAML representation of data to a file named by filename.
+// If the file does not exist, WriteYAMLToFile creates it with permissions perm
+// (before umask); otherwise WriteYAMLToFile truncates it before writing, without changing permissions.
+// Data must be a pointer to a fixed-size value or a slice of fixed-size values.
+func WriteYAMLToFile(filename string, data interface{}, perm os.FileMode, indent int) (err error) {
+	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+	}()
+
+	encoder := yaml.NewEncoder(f)
+	encoder.SetIndent(indent)
+
+	if err := encoder.Encode(data); err != nil {
+		return ierrors.Wrapf(err, "unable to marshal YAML data to %s", filename)
+	}
+
+	if err := encoder.Close(); err != nil {
+		return ierrors.Wrapf(err, "unable to close YAML encoder for %s", filename)
+	}
+
+	if err := f.Sync(); err != nil {
+		return ierrors.Wrapf(err, "unable to fsync file content to %s", filename)
 	}
 
 	return nil
 }
 
 // ReadTOMLFromFile reads TOML data from the file named by filename to data.
-// ReadTOMLFromFile uses toml.Unmarshal to decode data. Data must be a pointer to a fixed-size value or a slice
-// of fixed-size values.
+// ReadTOMLFromFile uses toml.Unmarshal to decode data.
+// Data must be a pointer to a fixed-size value or a slice of fixed-size values.
 func ReadTOMLFromFile(filename string, data interface{}) error {
 	tomlData, err := os.ReadFile(filename)
 	if err != nil {
@@ -157,8 +203,8 @@ func ReadTOMLFromFile(filename string, data interface{}) error {
 // WriteTOMLToFile writes the TOML representation of data to a file named by filename.
 // If the file does not exist, WriteTOMLToFile creates it with permissions perm
 // (before umask); otherwise WriteTOMLToFile truncates it before writing, without changing permissions.
-// WriteTOMLToFile uses toml.Marshal to encode data. Data must be a pointer to a fixed-size value or a slice
-// of fixed-size values. An additional header can be passed.
+// WriteTOMLToFile uses toml.Marshal to encode data.
+// Data must be a pointer to a fixed-size value or a slice of fixed-size values. An additional header can be passed.
 func WriteTOMLToFile(filename string, data interface{}, perm os.FileMode, header ...string) (err error) {
 	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
@@ -173,21 +219,21 @@ func WriteTOMLToFile(filename string, data interface{}, perm os.FileMode, header
 
 	tomlData, err := toml.Marshal(data)
 	if err != nil {
-		return fmt.Errorf("unable to marshal data to TOML: %w", err)
+		return ierrors.Wrap(err, "unable to marshal data to TOML")
 	}
 
 	if len(header) > 0 {
-		if _, err := f.Write([]byte(header[0] + "\n")); err != nil {
-			return fmt.Errorf("unable to write header to %s: %w", filename, err)
+		if _, err := f.WriteString(header[0] + "\n"); err != nil {
+			return ierrors.Wrapf(err, "unable to write header to %s", filename)
 		}
 	}
 
 	if _, err := f.Write(tomlData); err != nil {
-		return fmt.Errorf("unable to write TOML data to %s: %w", filename, err)
+		return ierrors.Wrapf(err, "unable to write TOML data to %s", filename)
 	}
 
 	if err := f.Sync(); err != nil {
-		return fmt.Errorf("unable to fsync file content to %s: %w", filename, err)
+		return ierrors.Wrapf(err, "unable to fsync file content to %s", filename)
 	}
 
 	return nil
@@ -211,10 +257,10 @@ func CreateTempFile(filePath string) (*os.File, string, error) {
 // CloseFileAndRename closes the file descriptor and renames the file.
 func CloseFileAndRename(fileDescriptor *os.File, sourceFilePath string, targetFilePath string) error {
 	if err := fileDescriptor.Close(); err != nil {
-		return fmt.Errorf("unable to close file: %w", err)
+		return ierrors.Wrap(err, "unable to close file")
 	}
 	if err := os.Rename(sourceFilePath, targetFilePath); err != nil {
-		return fmt.Errorf("unable to rename file: %w", err)
+		return ierrors.Wrap(err, "unable to rename file")
 	}
 
 	return nil
@@ -224,11 +270,11 @@ func CloseFileAndRename(fileDescriptor *os.File, sourceFilePath string, targetFi
 func DirectoryEmpty(dirPath string) (bool, error) {
 	// check if the directory exists
 	if _, err := os.Stat(dirPath); err != nil {
-		return false, fmt.Errorf("unable to check directory (%s): %w", dirPath, err)
+		return false, ierrors.Wrapf(err, "unable to check directory (%s)", dirPath)
 	}
 
 	// check if the directory is empty
-	if err := filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
+	if err := filepath.WalkDir(dirPath, func(path string, _ fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -241,7 +287,7 @@ func DirectoryEmpty(dirPath string) (bool, error) {
 		return os.ErrExist
 	}); err != nil {
 		if !os.IsExist(err) {
-			return false, fmt.Errorf("unable to check directory (%s): %w", dirPath, err)
+			return false, ierrors.Wrapf(err, "unable to check directory (%s)", dirPath)
 		}
 
 		// directory is not empty
@@ -256,19 +302,19 @@ func DirectoryEmpty(dirPath string) (bool, error) {
 func DirExistsAndIsNotEmpty(path string) (bool, error) {
 	dirExists, isDir, err := PathExists(path)
 	if err != nil {
-		return false, fmt.Errorf("unable to check dir path (%s): %w", path, err)
+		return false, ierrors.Wrapf(err, "unable to check dir path (%s)", path)
 	}
 	if !dirExists {
 		return false, nil
 	}
 	if !isDir {
-		return false, fmt.Errorf("given path is a file instead of a directory %s", path)
+		return false, ierrors.Errorf("given path is a file instead of a directory %s", path)
 	}
 
 	// check if the directory is empty (needed for example in docker environments)
 	dirEmpty, err := DirectoryEmpty(path)
 	if err != nil {
-		return false, fmt.Errorf("unable to check dir (%s): %w", path, err)
+		return false, ierrors.Wrapf(err, "unable to check dir (%s)", path)
 	}
 
 	return !dirEmpty, nil

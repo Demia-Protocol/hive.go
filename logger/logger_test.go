@@ -1,4 +1,3 @@
-//nolint:scopelint // we don't care about these linters in test cases
 package logger
 
 import (
@@ -128,7 +127,7 @@ func TestSetGlobalTwice(t *testing.T) {
 
 	rootLogger2, err := NewRootLogger(DefaultCfg)
 	require.NoError(t, err)
-	assert.Errorf(t, SetGlobalLogger(rootLogger2), ErrGlobalLoggerAlreadyInitialized.Error())
+	assert.Error(t, SetGlobalLogger(rootLogger2), ErrGlobalLoggerAlreadyInitialized.Error())
 }
 
 func getLogs(t require.TestingT, file *os.File) string {

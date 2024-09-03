@@ -2,19 +2,19 @@ package websockethub
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"sync/atomic"
 
 	"nhooyr.io/websocket"
 
-	"github.com/iotaledger/hive.go/logger"
+	"github.com/iotaledger/hive.go/ierrors"
+	"github.com/iotaledger/hive.go/log"
 	"github.com/iotaledger/hive.go/runtime/event"
 )
 
 var (
-	ErrWebsocketServerUnavailable = errors.New("websocket server unavailable")
-	ErrClientDisconnected         = errors.New("client was disconnected")
+	ErrWebsocketServerUnavailable = ierrors.New("websocket server unavailable")
+	ErrClientDisconnected         = ierrors.New("client was disconnected")
 )
 
 type ClientConnectionEvent struct {
@@ -39,7 +39,7 @@ func newEvents() *Events {
 // Hub maintains the set of active clients and broadcasts messages to the clients.
 type Hub struct {
 	// used Logger instance.
-	logger *logger.Logger
+	logger log.Logger
 
 	// the accept options of the websocket per client.
 	acceptOptions *websocket.AcceptOptions
@@ -81,7 +81,7 @@ type message struct {
 	dontDrop bool
 }
 
-func NewHub(logger *logger.Logger, acceptOptions *websocket.AcceptOptions, broadcastQueueSize int, clientSendChannelSize int, clientReadLimit int64) *Hub {
+func NewHub(logger log.Logger, acceptOptions *websocket.AcceptOptions, broadcastQueueSize int, clientSendChannelSize int, clientReadLimit int64) *Hub {
 	h := &Hub{
 		logger:                logger,
 		acceptOptions:         acceptOptions,
@@ -105,6 +105,7 @@ func (h *Hub) Events() *Events {
 }
 
 // BroadcastMsg sends a message to all clients.
+// JSON marshaling is done automatically based on "json" tags.
 func (h *Hub) BroadcastMsg(ctx context.Context, data interface{}, dontDrop ...bool) error {
 	if h.shutdownFlag.Load() {
 		// hub was already shut down or was not started yet
@@ -157,6 +158,12 @@ func (h *Hub) BroadcastMsg(ctx context.Context, data interface{}, dontDrop ...bo
 	}
 }
 
+// BroadcastMsgRaw sends a raw message to all clients.
+// The message is not JSON marshaled.
+func (h *Hub) BroadcastMsgRaw(ctx context.Context, data []byte, dontDrop ...bool) error {
+	return h.BroadcastMsg(ctx, &rawMsg{Data: data}, dontDrop...)
+}
+
 func (h *Hub) removeClient(client *Client) {
 	delete(h.clients, client)
 	close(client.ExitSignal)
@@ -177,6 +184,10 @@ drainLoop:
 	if client.onDisconnect != nil {
 		client.onDisconnect(client)
 	}
+
+	// cleanup the logger
+	client.Logger.Shutdown()
+
 	h.events.ClientDisconnected.Trigger(&ClientConnectionEvent{ID: client.id})
 
 	// We do not call "close(client.sendChan)" because we have multiple senders.
@@ -251,7 +262,7 @@ func (h *Hub) Run(ctx context.Context) {
 			case client := <-h.unregister:
 				if _, ok := h.clients[client]; ok {
 					h.removeClient(client)
-					h.logger.Infof("Removed websocket client")
+					h.logger.LogInfof("Removed websocket client")
 				}
 
 			case message := <-h.broadcast:
@@ -319,7 +330,6 @@ func (h *Hub) ServeWebsocket(
 	onCreate func(client *Client),
 	onConnect func(client *Client),
 	onDisconnect func(client *Client)) error {
-
 	if h.shutdownFlag.Load() {
 		// hub was already shut down or was not started yet
 		return ErrWebsocketServerUnavailable
@@ -327,13 +337,13 @@ func (h *Hub) ServeWebsocket(
 
 	defer func() {
 		if r := recover(); r != nil {
-			h.logger.Errorf("recovered from ServeWebsocket func: %s", r)
+			h.logger.LogErrorf("recovered from ServeWebsocket func: %s", r)
 		}
 	}()
 
 	conn, err := websocket.Accept(w, r, h.acceptOptions)
 	if err != nil {
-		h.logger.Warn(err.Error())
+		h.logger.LogWarn(err.Error())
 		return err
 	}
 

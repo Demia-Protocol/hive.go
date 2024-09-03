@@ -1,37 +1,25 @@
 package orderedmap
 
 import (
-	"context"
 	"sync"
 
-	"golang.org/x/xerrors"
-
-	"github.com/iotaledger/hive.go/serializer/v2"
-	"github.com/iotaledger/hive.go/serializer/v2/serix"
+	"github.com/iotaledger/hive.go/ds/shrinkingmap"
 )
 
 // OrderedMap provides a concurrent-safe ordered map.
 type OrderedMap[K comparable, V any] struct {
 	head       *Element[K, V]
 	tail       *Element[K, V]
-	dictionary map[K]*Element[K, V]
+	dictionary *shrinkingmap.ShrinkingMap[K, *Element[K, V]]
 	size       int
 	mutex      sync.RWMutex
 }
 
 // New returns a new *OrderedMap.
 func New[K comparable, V any]() *OrderedMap[K, V] {
-	orderedMap := new(OrderedMap[K, V])
-	orderedMap.Initialize()
-
-	return orderedMap
-}
-
-// Initialize returns the first map entry.
-func (o *OrderedMap[K, V]) Initialize() {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-	o.dictionary = make(map[K]*Element[K, V])
+	return &OrderedMap[K, V]{
+		dictionary: shrinkingmap.New[K, *Element[K, V]](),
+	}
 }
 
 // Head returns the first map entry.
@@ -67,9 +55,7 @@ func (o *OrderedMap[K, V]) Has(key K) (has bool) {
 	o.mutex.RLock()
 	defer o.mutex.RUnlock()
 
-	_, has = o.dictionary[key]
-
-	return
+	return o.dictionary.Has(key)
 }
 
 // Get returns the value mapped to the given key if exists.
@@ -77,7 +63,7 @@ func (o *OrderedMap[K, V]) Get(key K) (value V, exists bool) {
 	o.mutex.RLock()
 	defer o.mutex.RUnlock()
 
-	orderedMapElement, orderedMapElementExists := o.dictionary[key]
+	orderedMapElement, orderedMapElementExists := o.dictionary.Get(key)
 	if !orderedMapElementExists {
 		var result V
 		return result, false
@@ -91,9 +77,10 @@ func (o *OrderedMap[K, V]) Set(key K, newValue V) (previousValue V, previousValu
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	if oldValue, oldValueExists := o.dictionary[key]; oldValueExists {
+	if oldValue, oldValueExists := o.dictionary.Get(key); oldValueExists {
 		previousValue = oldValue.value
 		oldValue.value = newValue
+
 		return previousValue, true
 	}
 
@@ -110,7 +97,7 @@ func (o *OrderedMap[K, V]) Set(key K, newValue V) (previousValue V, previousValu
 	o.tail = newElement
 	o.size++
 
-	o.dictionary[key] = newElement
+	o.dictionary.Set(key, newElement)
 
 	return previousValue, false
 }
@@ -165,13 +152,17 @@ func (o *OrderedMap[K, V]) ForEachReverse(consumer func(key K, value V) bool) bo
 
 // Clear removes all elements from the OrderedMap.
 func (o *OrderedMap[K, V]) Clear() {
+	if o == nil {
+		return
+	}
+
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
 	o.head = nil
 	o.tail = nil
 	o.size = 0
-	o.dictionary = make(map[K]*Element[K, V])
+	o.dictionary = shrinkingmap.New[K, *Element[K, V]]()
 }
 
 // Delete deletes the given key (and related value) from the orderedMap.
@@ -184,12 +175,12 @@ func (o *OrderedMap[K, V]) Delete(key K) bool {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	value, valueExists := o.dictionary[key]
+	value, valueExists := o.dictionary.Get(key)
 	if !valueExists {
 		return false
 	}
 
-	delete(o.dictionary, key)
+	o.dictionary.Delete(key)
 	o.size--
 
 	if value.prev != nil {
@@ -225,80 +216,19 @@ func (o *OrderedMap[K, V]) IsEmpty() bool {
 }
 
 // Clone returns a copy of the orderedMap.
-func (o *OrderedMap[K, V]) Clone() (cloned *OrderedMap[K, V]) {
-	cloned = New[K, V]()
-	o.ForEach(func(key K, value V) bool {
-		cloned.Set(key, value)
-
-		return true
-	})
-
-	return
-}
-
-// Encode returns a serialized byte slice of the object.
-func (o *OrderedMap[K, V]) Encode() ([]byte, error) {
-	seri := serializer.NewSerializer()
-
-	seri.WriteNum(uint32(o.Size()), func(err error) error {
-		return xerrors.Errorf("failed to write OrderedMap size to serializer: %w", err)
-	})
-
-	o.ForEach(func(key K, val V) bool {
-		keyBytes, err := serix.DefaultAPI.Encode(context.Background(), key)
-		if err != nil {
-			seri.AbortIf(func(_ error) error {
-				return xerrors.Errorf("failed to encode OrderedMap key: %w", err)
-			})
-		}
-		seri.WriteBytes(keyBytes, func(err error) error {
-			return xerrors.Errorf("failed to write OrderedMap key to serializer: %w", err)
-		})
-
-		valBytes, err := serix.DefaultAPI.Encode(context.Background(), val)
-		if err != nil {
-			seri.AbortIf(func(_ error) error {
-				return xerrors.Errorf("failed to serialize OrderedMap value: %w", err)
-			})
-		}
-		seri.WriteBytes(valBytes, func(err error) error {
-			return xerrors.Errorf("failed to write OrderedMap value to serializer: %w", err)
-		})
-
-		return true
-	})
-
-	return seri.Serialize()
-}
-
-// Decode deserializes bytes into a valid object.
-func (o *OrderedMap[K, V]) Decode(b []byte) (bytesRead int, err error) {
-	o.Initialize()
-
-	var mapSize uint32
-	bytesReadSize, err := serix.DefaultAPI.Decode(context.Background(), b[bytesRead:], &mapSize)
-	if err != nil {
-		return 0, err
-	}
-	bytesRead += bytesReadSize
-
-	for i := uint32(0); i < mapSize; i++ {
-		var key K
-		bytesReadKey, err := serix.DefaultAPI.Decode(context.Background(), b[bytesRead:], &key)
-		if err != nil {
-			return 0, err
-		}
-		bytesRead += bytesReadKey
-
-		var value V
-		bytesReadValue, err := serix.DefaultAPI.Decode(context.Background(), b[bytesRead:], &value)
-		if err != nil {
-			return 0, err
-		}
-		bytesRead += bytesReadValue
-
-		o.Set(key, value)
+func (o *OrderedMap[K, V]) Clone() *OrderedMap[K, V] {
+	if o == nil {
+		return nil
 	}
 
-	return bytesRead, nil
+	cloned := New[K, V]()
+
+	o.mutex.RLock()
+	defer o.mutex.RUnlock()
+
+	for currentEntry := o.head; currentEntry != nil; currentEntry = currentEntry.next {
+		cloned.Set(currentEntry.key, currentEntry.value)
+	}
+
+	return cloned
 }

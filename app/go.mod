@@ -1,57 +1,46 @@
 module github.com/iotaledger/hive.go/app
 
-go 1.20
+go 1.22
 
 require (
+	github.com/felixge/fgprof v0.9.4
 	github.com/hashicorp/go-version v1.6.0
-	github.com/iotaledger/hive.go/lo v0.0.0-20230417083738-41b63759a6b8
-	github.com/iotaledger/hive.go/logger v0.0.0-20230417083738-41b63759a6b8
-	github.com/iotaledger/hive.go/runtime v0.0.0-20230417083738-41b63759a6b8
+	github.com/iotaledger/hive.go/ierrors v0.0.0-20240517131232-748f1ce3a2d2
+	github.com/iotaledger/hive.go/lo v0.0.0-20240517131232-748f1ce3a2d2
+	github.com/iotaledger/hive.go/log v0.0.0-20240517131232-748f1ce3a2d2
+	github.com/iotaledger/hive.go/runtime v0.0.0-20240517131232-748f1ce3a2d2
 	github.com/knadh/koanf v1.5.0
-	github.com/pkg/errors v0.9.1
-	github.com/spf13/cast v1.5.0
+	github.com/spf13/cast v1.6.0
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.9.0
 	github.com/tcnksm/go-latest v0.0.0-20170313132115-e3007ae9052e
-	go.uber.org/dig v1.16.1
-	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
+	go.uber.org/dig v1.17.1
 	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
-	github.com/cockroachdb/errors v1.9.1 // indirect
-	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
-	github.com/cockroachdb/redact v1.1.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/ethereum/go-ethereum v1.11.5 // indirect
+	github.com/ethereum/go-ethereum v1.14.3 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
-	github.com/fsnotify/fsnotify v1.6.0 // indirect
-	github.com/getsentry/sentry-go v0.20.0 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/google/go-github v17.0.0+incompatible // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/iancoleman/orderedmap v0.2.0 // indirect
-	github.com/iotaledger/hive.go/constraints v0.0.0-20230417083738-41b63759a6b8 // indirect
-	github.com/iotaledger/hive.go/ds v0.0.0-20230417083738-41b63759a6b8 // indirect
-	github.com/iotaledger/hive.go/serializer/v2 v2.0.0-rc.1.0.20230228134549-385c1ca29f1c // indirect
-	github.com/iotaledger/hive.go/stringify v0.0.0-20230417083738-41b63759a6b8 // indirect
-	github.com/kr/pretty v0.3.1 // indirect
+	github.com/google/pprof v0.0.0-20240509144519-723abb6459b7 // indirect
+	github.com/holiman/uint256 v1.2.4 // indirect
+	github.com/iancoleman/orderedmap v0.3.0 // indirect
+	github.com/iotaledger/hive.go/constraints v0.0.0-20240517131232-748f1ce3a2d2 // indirect
+	github.com/iotaledger/hive.go/ds v0.0.0-20240517131232-748f1ce3a2d2 // indirect
+	github.com/iotaledger/hive.go/serializer/v2 v2.0.0-rc.1.0.20240517131232-748f1ce3a2d2 // indirect
+	github.com/iotaledger/hive.go/stringify v0.0.0-20240517131232-748f1ce3a2d2 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
-	github.com/mr-tron/base58 v1.2.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.0.7 // indirect
-	github.com/petermattis/goid v0.0.0-20230317030725-371a4b8eda08 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
+	github.com/petermattis/goid v0.0.0-20240503122002-4b96552b8156 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.1 // indirect
-	go.uber.org/atomic v1.10.0 // indirect
-	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/crypto v0.8.0 // indirect
-	golang.org/x/net v0.9.0 // indirect
-	golang.org/x/sys v0.7.0 // indirect
-	golang.org/x/text v0.9.0 // indirect
+	golang.org/x/net v0.25.0 // indirect
+	golang.org/x/sys v0.20.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

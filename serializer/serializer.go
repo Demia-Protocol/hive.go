@@ -9,33 +9,11 @@ import (
 	"reflect"
 	"sort"
 	"time"
+
+	"github.com/iotaledger/hive.go/ierrors"
 )
 
 type (
-	// ArrayOf12Bytes is an array of 12 bytes.
-	ArrayOf12Bytes = [12]byte
-
-	// ArrayOf20Bytes is an array of 20 bytes.
-	ArrayOf20Bytes = [20]byte
-
-	// ArrayOf32Bytes is an array of 32 bytes.
-	ArrayOf32Bytes = [32]byte
-
-	// ArrayOf38Bytes is an array of 38 bytes.
-	ArrayOf38Bytes = [38]byte
-
-	// ArrayOf64Bytes is an array of 64 bytes.
-	ArrayOf64Bytes = [64]byte
-
-	// ArrayOf49Bytes is an array of 49 bytes.
-	ArrayOf49Bytes = [49]byte
-
-	// SliceOfArraysOf32Bytes is a slice of arrays of which each is 32 bytes.
-	SliceOfArraysOf32Bytes = []ArrayOf32Bytes
-
-	// SliceOfArraysOf64Bytes is a slice of arrays of which each is 64 bytes.
-	SliceOfArraysOf64Bytes = []ArrayOf64Bytes
-
 	// ErrProducer might produce an error.
 	ErrProducer func(err error) error
 
@@ -57,11 +35,13 @@ type SeriLengthPrefixType byte
 
 const (
 	// SeriLengthPrefixTypeAsByte defines a collection length to be denoted by a byte.
-	SeriLengthPrefixTypeAsByte SeriLengthPrefixType = iota
-	// SeriLengthPrefixTypeAsUint16 defines a collection length to be denoted by a uint16.
+	SeriLengthPrefixTypeAsByte SeriLengthPrefixType = iota + 200
+	// SeriLengthPrefixTypeAsUint16 defines a collection length to be denoted by an uint16.
 	SeriLengthPrefixTypeAsUint16
-	// SeriLengthPrefixTypeAsUint32 defines a collection length to be denoted by a uint32.
+	// SeriLengthPrefixTypeAsUint32 defines a collection length to be denoted by an uint32.
 	SeriLengthPrefixTypeAsUint32
+	// SeriLengthPrefixTypeAsUint64 defines a collection length to be denoted by an uint64.
+	SeriLengthPrefixTypeAsUint64
 )
 
 // NewSerializer creates a new Serializer.
@@ -203,8 +183,6 @@ func (s *Serializer) WriteBool(v bool, errProducer ErrProducer) *Serializer {
 }
 
 // WriteByte writes the given byte to the Serializer.
-//
-//nolint:stdmethods // false positive
 func (s *Serializer) WriteByte(data byte, errProducer ErrProducer) *Serializer {
 	if s.err != nil {
 		return s
@@ -238,7 +216,7 @@ func (s *Serializer) writeSliceLength(l int, lenType SeriLengthPrefixType, errPr
 	switch lenType {
 	case SeriLengthPrefixTypeAsByte:
 		if l > math.MaxUint8 {
-			s.err = errProducer(fmt.Errorf("unable to serialize collection length: length %d is out of range (0-%d)", l, math.MaxUint8))
+			s.err = errProducer(ierrors.Errorf("unable to serialize collection length: length %d is out of range (0-%d)", l, math.MaxUint8))
 
 			return
 		}
@@ -249,7 +227,7 @@ func (s *Serializer) writeSliceLength(l int, lenType SeriLengthPrefixType, errPr
 		}
 	case SeriLengthPrefixTypeAsUint16:
 		if l > math.MaxUint16 {
-			s.err = errProducer(fmt.Errorf("unable to serialize collection length: length %d is out of range (0-%d)", l, math.MaxUint16))
+			s.err = errProducer(ierrors.Errorf("unable to serialize collection length: length %d is out of range (0-%d)", l, math.MaxUint16))
 
 			return
 		}
@@ -260,7 +238,7 @@ func (s *Serializer) writeSliceLength(l int, lenType SeriLengthPrefixType, errPr
 		}
 	case SeriLengthPrefixTypeAsUint32:
 		if l > math.MaxUint32 {
-			s.err = errProducer(fmt.Errorf("unable to serialize collection length: length %d is out of range (0-%d)", l, math.MaxUint32))
+			s.err = errProducer(ierrors.Errorf("unable to serialize collection length: length %d is out of range (0-%d)", l, math.MaxUint32))
 
 			return
 		}
@@ -283,12 +261,12 @@ func (s *Serializer) WriteVariableByteSlice(data []byte, lenType SeriLengthPrefi
 	sliceLen := len(data)
 	switch {
 	case maxLen > 0 && sliceLen > maxLen:
-		s.err = errProducer(fmt.Errorf("%w: slice (len %d) exceeds max length of %d ", ErrSliceLengthTooLong, sliceLen, maxLen))
+		s.err = errProducer(ierrors.Wrapf(ErrSliceLengthTooLong, "slice (len %d) exceeds max length of %d ", sliceLen, maxLen))
 
 		return s
 
 	case minLen > 0 && sliceLen < minLen:
-		s.err = errProducer(fmt.Errorf("%w: slice (len %d) is less than min length of %d ", ErrSliceLengthTooShort, sliceLen, maxLen))
+		s.err = errProducer(ierrors.Wrapf(ErrSliceLengthTooShort, "slice (len %d) is less than min length of %d ", sliceLen, minLen))
 
 		return s
 	}
@@ -305,34 +283,6 @@ func (s *Serializer) WriteVariableByteSlice(data []byte, lenType SeriLengthPrefi
 	}
 
 	return s
-}
-
-// Write32BytesArraySlice writes a slice of arrays of 32 bytes to the Serializer.
-func (s *Serializer) Write32BytesArraySlice(slice SliceOfArraysOf32Bytes, deSeriMode DeSerializationMode, lenType SeriLengthPrefixType, arrayRules *ArrayRules, errProducer ErrProducer) *Serializer {
-	if s.err != nil {
-		return s
-	}
-
-	data := make([][]byte, len(slice))
-	for i := range slice {
-		data[i] = slice[i][:]
-	}
-
-	return s.WriteSliceOfByteSlices(data, deSeriMode, lenType, arrayRules, errProducer)
-}
-
-// Write64BytesArraySlice writes a slice of arrays of 64 bytes to the Serializer.
-func (s *Serializer) Write64BytesArraySlice(slice SliceOfArraysOf64Bytes, deSeriMode DeSerializationMode, lenType SeriLengthPrefixType, arrayRules *ArrayRules, errProducer ErrProducer) *Serializer {
-	if s.err != nil {
-		return s
-	}
-
-	data := make([][]byte, len(slice))
-	for i := range slice {
-		data[i] = slice[i][:]
-	}
-
-	return s.WriteSliceOfByteSlices(data, deSeriMode, lenType, arrayRules, errProducer)
 }
 
 // WriteSliceOfObjects writes Serializables into the Serializer.
@@ -458,17 +408,36 @@ func (s *Serializer) WriteTime(timeToWrite time.Time, errProducer ErrProducer) *
 		return s
 	}
 
-	if timeToWrite.IsZero() {
-		if err := binary.Write(&s.buf, binary.LittleEndian, int64(0)); err != nil {
-			s.err = errProducer(err)
-		}
-	} else {
-		if err := binary.Write(&s.buf, binary.LittleEndian, timeToWrite.UnixNano()); err != nil {
-			s.err = errProducer(err)
-		}
+	if err := binary.Write(&s.buf, binary.LittleEndian, TimeToUint64(timeToWrite)); err != nil {
+		s.err = errProducer(err)
 	}
 
 	return s
+}
+
+// TimeToUint64 converts times to uint64 unix timestamps with nanosecond-precision.
+// Times whose unix timestamp in seconds would be larger than what fits into a
+// nanosecond-precision int64 timestamp will be truncated to the max value.
+// Times before the Unix Epoch will be truncated to the Unix Epoch.
+func TimeToUint64(value time.Time) uint64 {
+	unixSeconds := value.Unix()
+	unixNano := value.UnixNano()
+
+	// we need to check against Unix seconds here, because the UnixNano result is undefined if the Unix time
+	// in nanoseconds cannot be represented by an int64 (a date before the year 1678 or after 2262)
+	switch {
+	case unixSeconds > MaxNanoTimestampInt64Seconds:
+		unixNano = math.MaxInt64
+	case unixSeconds < 0 || unixNano < 0:
+		unixNano = 0
+	}
+
+	return uint64(unixNano)
+}
+
+// Uint64ToTime converts a uint64 unix timestamp with nanosecond-precision to a time.Time.
+func Uint64ToTime(value uint64) time.Time {
+	return time.Unix(0, int64(value)).UTC()
 }
 
 // WritePayload writes the given payload Serializable into the Serializer.
@@ -496,7 +465,7 @@ func (s *Serializer) WritePayload(payload Serializable, deSeriMode DeSerializati
 
 	payloadBytes, err := payload.Serialize(deSeriMode, deSeriCtx)
 	if err != nil {
-		s.err = errProducer(fmt.Errorf("unable to serialize payload: %w", err))
+		s.err = errProducer(ierrors.Wrap(err, "unable to serialize payload"))
 
 		return s
 	}
@@ -525,7 +494,7 @@ func (s *Serializer) WritePayloadLength(length int, errProducer ErrProducer) *Se
 
 func (s *Serializer) writePayloadLength(length int) error {
 	if err := binary.Write(&s.buf, binary.LittleEndian, uint32(length)); err != nil {
-		return fmt.Errorf("unable to serialize payload length: %w", err)
+		return ierrors.Wrap(err, "unable to serialize payload length")
 	}
 
 	return nil
@@ -540,12 +509,12 @@ func (s *Serializer) WriteString(str string, lenType SeriLengthPrefixType, errPr
 	strLen := len(str)
 	switch {
 	case maxLen > 0 && strLen > maxLen:
-		s.err = errProducer(fmt.Errorf("%w: string (len %d) exceeds max length of %d ", ErrStringTooLong, strLen, maxLen))
+		s.err = errProducer(ierrors.Wrapf(ErrStringTooLong, "string (len %d) exceeds max length of %d ", strLen, maxLen))
 
 		return s
 
 	case minLen > 0 && strLen < minLen:
-		s.err = errProducer(fmt.Errorf("%w: string (len %d) is less than min length of %d", ErrStringTooShort, strLen, minLen))
+		s.err = errProducer(ierrors.Wrapf(ErrStringTooShort, "string (len %d) is less than min length of %d", strLen, minLen))
 
 		return s
 	}
@@ -622,8 +591,6 @@ func (d *Deserializer) ReadBool(dest *bool, errProducer ErrProducer) *Deserializ
 }
 
 // ReadByte reads a byte into dest.
-//
-//nolint:stdmethods // false positive
 func (d *Deserializer) ReadByte(dest *byte, errProducer ErrProducer) *Deserializer {
 	if d.err != nil {
 		return d
@@ -810,18 +777,18 @@ func (d *Deserializer) ReadVariableByteSlice(slice *[]byte, lenType SeriLengthPr
 
 	switch {
 	case maxLen > 0 && sliceLength > maxLen:
-		d.err = errProducer(fmt.Errorf("%w: denoted %d bytes, max allowed %d ", ErrDeserializationLengthInvalid, sliceLength, maxLen))
+		d.err = errProducer(ierrors.Wrapf(ErrDeserializationLengthMaxExceeded, "denoted %d bytes, max allowed %d ", sliceLength, maxLen))
 	case minLen > 0 && sliceLength < minLen:
-		d.err = errProducer(fmt.Errorf("%w: denoted %d bytes, min required %d ", ErrDeserializationLengthInvalid, sliceLength, minLen))
+		d.err = errProducer(ierrors.Wrapf(ErrDeserializationLengthMinNotReached, "denoted %d bytes, min required %d ", sliceLength, minLen))
 	}
 
+	dest := make([]byte, sliceLength)
 	if sliceLength == 0 {
-		*slice = nil
+		*slice = dest
 
 		return d
 	}
 
-	dest := make([]byte, sliceLength)
 	if len(d.src[d.offset:]) < sliceLength {
 		d.err = errProducer(ErrDeserializationNotEnoughData)
 
@@ -836,133 +803,12 @@ func (d *Deserializer) ReadVariableByteSlice(slice *[]byte, lenType SeriLengthPr
 	return d
 }
 
-// ReadArrayOf12Bytes reads an array of 12 bytes.
-func (d *Deserializer) ReadArrayOf12Bytes(arr *ArrayOf12Bytes, errProducer ErrProducer) *Deserializer {
-	if d.err != nil {
-		return d
-	}
-	const length = 12
-
-	l := len(d.src[d.offset:])
-	if l < length {
-		d.err = errProducer(ErrDeserializationNotEnoughData)
-
-		return d
-	}
-
-	copy(arr[:], d.src[d.offset:d.offset+length])
-	d.offset += length
-
-	return d
-}
-
-// ReadArrayOf20Bytes reads an array of 20 bytes.
-func (d *Deserializer) ReadArrayOf20Bytes(arr *ArrayOf20Bytes, errProducer ErrProducer) *Deserializer {
-	if d.err != nil {
-		return d
-	}
-	const length = 20
-
-	l := len(d.src[d.offset:])
-	if l < length {
-		d.err = errProducer(ErrDeserializationNotEnoughData)
-
-		return d
-	}
-
-	copy(arr[:], d.src[d.offset:d.offset+length])
-	d.offset += length
-
-	return d
-}
-
-// ReadArrayOf32Bytes reads an array of 32 bytes.
-func (d *Deserializer) ReadArrayOf32Bytes(arr *ArrayOf32Bytes, errProducer ErrProducer) *Deserializer {
-	if d.err != nil {
-		return d
-	}
-	const length = 32
-
-	l := len(d.src[d.offset:])
-	if l < length {
-		d.err = errProducer(ErrDeserializationNotEnoughData)
-
-		return d
-	}
-
-	copy(arr[:], d.src[d.offset:d.offset+length])
-	d.offset += length
-
-	return d
-}
-
-// ReadArrayOf38Bytes reads an array of 38 bytes.
-func (d *Deserializer) ReadArrayOf38Bytes(arr *ArrayOf38Bytes, errProducer ErrProducer) *Deserializer {
-	if d.err != nil {
-		return d
-	}
-	const length = 38
-
-	l := len(d.src[d.offset:])
-	if l < length {
-		d.err = errProducer(ErrDeserializationNotEnoughData)
-
-		return d
-	}
-
-	copy(arr[:], d.src[d.offset:d.offset+length])
-	d.offset += length
-
-	return d
-}
-
-// ReadArrayOf64Bytes reads an array of 64 bytes.
-func (d *Deserializer) ReadArrayOf64Bytes(arr *ArrayOf64Bytes, errProducer ErrProducer) *Deserializer {
-	if d.err != nil {
-		return d
-	}
-	const length = 64
-
-	l := len(d.src[d.offset:])
-	if l < length {
-		d.err = errProducer(ErrDeserializationNotEnoughData)
-
-		return d
-	}
-
-	copy(arr[:], d.src[d.offset:d.offset+length])
-	d.offset += length
-
-	return d
-}
-
-// ReadArrayOf49Bytes reads an array of 49 bytes.
-func (d *Deserializer) ReadArrayOf49Bytes(arr *ArrayOf49Bytes, errProducer ErrProducer) *Deserializer {
-	if d.err != nil {
-		return d
-	}
-	const length = 49
-
-	l := len(d.src[d.offset:])
-	if l < length {
-		d.err = errProducer(ErrDeserializationNotEnoughData)
-
-		return d
-	}
-
-	copy(arr[:], d.src[d.offset:d.offset+length])
-	d.offset += length
-
-	return d
-}
-
 // reads the length of a slice.
 func (d *Deserializer) readSliceLength(lenType SeriLengthPrefixType, errProducer ErrProducer) (int, error) {
 	l := len(d.src[d.offset:])
 	var sliceLength int
 
 	switch lenType {
-
 	case SeriLengthPrefixTypeAsByte:
 		if l < OneByte {
 			return 0, errProducer(ErrDeserializationNotEnoughData)
@@ -993,106 +839,6 @@ func (d *Deserializer) readSliceLength(lenType SeriLengthPrefixType, errProducer
 	return sliceLength, nil
 }
 
-// ReadSliceOfArraysOf32Bytes reads a slice of arrays of 32 bytes.
-func (d *Deserializer) ReadSliceOfArraysOf32Bytes(slice *SliceOfArraysOf32Bytes, deSeriMode DeSerializationMode, lenType SeriLengthPrefixType, arrayRules *ArrayRules, errProducer ErrProducer) *Deserializer {
-	if d.err != nil {
-		return d
-	}
-	const length = 32
-
-	sliceLength, err := d.readSliceLength(lenType, errProducer)
-	if err != nil {
-		d.err = err
-
-		return d
-	}
-
-	var arrayElementValidator ElementValidationFunc
-	if arrayRules != nil && deSeriMode.HasMode(DeSeriModePerformValidation) {
-		if err := arrayRules.CheckBounds(uint(sliceLength)); err != nil {
-			d.err = errProducer(err)
-
-			return d
-		}
-
-		arrayElementValidator = arrayRules.ElementValidationFunc()
-	}
-
-	s := make(SliceOfArraysOf32Bytes, sliceLength)
-	for i := 0; i < sliceLength; i++ {
-		if len(d.src[d.offset:]) < length {
-			d.err = errProducer(ErrDeserializationNotEnoughData)
-
-			return d
-		}
-
-		if arrayElementValidator != nil {
-			if err := arrayElementValidator(i, d.src[d.offset:d.offset+length]); err != nil {
-				d.err = errProducer(err)
-
-				return d
-			}
-		}
-
-		copy(s[i][:], d.src[d.offset:d.offset+length])
-		d.offset += length
-	}
-
-	*slice = s
-
-	return d
-}
-
-// ReadSliceOfArraysOf64Bytes reads a slice of arrays of 64 bytes.
-func (d *Deserializer) ReadSliceOfArraysOf64Bytes(slice *SliceOfArraysOf64Bytes, deSeriMode DeSerializationMode, lenType SeriLengthPrefixType, arrayRules *ArrayRules, errProducer ErrProducer) *Deserializer {
-	if d.err != nil {
-		return d
-	}
-	const length = 64
-
-	sliceLength, err := d.readSliceLength(lenType, errProducer)
-	if err != nil {
-		d.err = err
-
-		return d
-	}
-
-	var arrayElementValidator ElementValidationFunc
-	if arrayRules != nil && deSeriMode.HasMode(DeSeriModePerformValidation) {
-		if err := arrayRules.CheckBounds(uint(sliceLength)); err != nil {
-			d.err = errProducer(err)
-
-			return d
-		}
-
-		arrayElementValidator = arrayRules.ElementValidationFunc()
-	}
-
-	s := make(SliceOfArraysOf64Bytes, sliceLength)
-	for i := 0; i < sliceLength; i++ {
-		if len(d.src[d.offset:]) < length {
-			d.err = errProducer(ErrDeserializationNotEnoughData)
-
-			return d
-		}
-
-		if arrayElementValidator != nil {
-			if err := arrayElementValidator(i, d.src[d.offset:d.offset+length]); err != nil {
-				d.err = errProducer(err)
-
-				return d
-			}
-		}
-
-		copy(s[i][:], d.src[d.offset:d.offset+length])
-		d.offset += length
-	}
-
-	*slice = s
-
-	return d
-}
-
 // ReadObject reads an object, using the given SerializableReadGuardFunc.
 func (d *Deserializer) ReadObject(target interface{}, deSeriMode DeSerializationMode, deSeriCtx interface{}, typeDen TypeDenotationType, serSel SerializableReadGuardFunc, errProducer ErrProducer) *Deserializer {
 	deserializer, _ := d.readObject(target, deSeriMode, deSeriCtx, typeDen, serSel, errProducer)
@@ -1121,7 +867,6 @@ func (d *Deserializer) GetObjectType(typeDen TypeDenotationType) (uint32, error)
 	}
 
 	return ty, nil
-
 }
 
 func (d *Deserializer) readObject(target interface{}, deSeriMode DeSerializationMode, deSeriCtx interface{}, typeDen TypeDenotationType, serSel SerializableReadGuardFunc, errProducer ErrProducer) (*Deserializer, uint32) {
@@ -1203,7 +948,7 @@ func (d *Deserializer) ReadSliceOfObjects(
 
 	if deSeriMode.HasMode(DeSeriModePerformValidation) {
 		if !arrayRules.MustOccur.Subset(seenTypes) {
-			d.err = errProducer(fmt.Errorf("%w: should %v, has %v", ErrArrayValidationTypesNotOccurred, arrayRules.MustOccur, seenTypes))
+			d.err = errProducer(ierrors.Wrapf(ErrArrayValidationTypesNotOccurred, "should %v, has %v", arrayRules.MustOccur, seenTypes))
 
 			return d
 		}
@@ -1252,8 +997,7 @@ func (d *Deserializer) ReadSequenceOfObjects(
 		return d
 	}
 
-	for i := 0; i < sliceLength; i++ {
-
+	for i := range sliceLength {
 		// Remember where we were before reading the item.
 		srcBefore := d.src[d.offset:]
 		offsetBefore := d.offset
@@ -1276,7 +1020,6 @@ func (d *Deserializer) ReadSequenceOfObjects(
 	}
 
 	return d
-
 }
 func (d *Deserializer) readSerializablesIntoTarget(target interface{}, seris Serializables) {
 	switch x := target.(type) {
@@ -1295,22 +1038,24 @@ func (d *Deserializer) ReadTime(dest *time.Time, errProducer ErrProducer) *Deser
 		return d
 	}
 
-	l := len(d.src[d.offset:])
-
-	if l < Int64ByteSize {
+	remainingLen := len(d.src[d.offset:])
+	if remainingLen < UInt64ByteSize {
 		d.err = errProducer(ErrDeserializationNotEnoughData)
 
 		return d
 	}
-	l = Int64ByteSize
-	nanoSeconds := int64(binary.LittleEndian.Uint64(d.src[d.offset : d.offset+Int64ByteSize]))
-	if nanoSeconds == 0 {
-		*dest = time.Time{}
-	} else {
-		*dest = time.Unix(0, nanoSeconds)
+
+	nanoseconds := binary.LittleEndian.Uint64(d.src[d.offset : d.offset+UInt64ByteSize])
+
+	// If the number of seconds in the nanosecond timestamp exceeds the max number of
+	// seconds that can be represented in a nanosecond int64 timestamp truncate to max.
+	if nanoseconds/1_000_000_000 > MaxNanoTimestampInt64Seconds {
+		nanoseconds = math.MaxInt64
 	}
 
-	d.offset += l
+	*dest = time.Unix(0, int64(nanoseconds)).UTC()
+
+	d.offset += UInt64ByteSize
 
 	return d
 }
@@ -1318,7 +1063,7 @@ func (d *Deserializer) ReadTime(dest *time.Time, errProducer ErrProducer) *Deser
 // ReadPayloadLength reads the payload length from the deserializer.
 func (d *Deserializer) ReadPayloadLength() (uint32, error) {
 	if len(d.src[d.offset:]) < PayloadLengthByteSize {
-		return 0, fmt.Errorf("%w: data is smaller than payload length denotation", ErrDeserializationNotEnoughData)
+		return 0, ierrors.Wrap(ErrDeserializationNotEnoughData, "data is smaller than payload length denotation")
 	}
 
 	payloadLength := binary.LittleEndian.Uint32(d.src[d.offset:])
@@ -1346,11 +1091,11 @@ func (d *Deserializer) ReadPayload(s interface{}, deSeriMode DeSerializationMode
 
 	switch {
 	case len(d.src[d.offset:]) < MinPayloadByteSize:
-		d.err = errProducer(fmt.Errorf("%w: payload data is smaller than min. required length %d", ErrDeserializationNotEnoughData, MinPayloadByteSize))
+		d.err = errProducer(ierrors.Wrapf(ErrDeserializationNotEnoughData, "payload data is smaller than min. required length %d", MinPayloadByteSize))
 
 		return d
 	case len(d.src[d.offset:]) < int(payloadLength):
-		d.err = errProducer(fmt.Errorf("%w: payload length denotes more bytes than are available", ErrDeserializationNotEnoughData))
+		d.err = errProducer(ierrors.Wrap(ErrDeserializationNotEnoughData, "payload length denotes more bytes than are available"))
 
 		return d
 	}
@@ -1370,7 +1115,7 @@ func (d *Deserializer) ReadPayload(s interface{}, deSeriMode DeSerializationMode
 	}
 
 	if payloadBytesConsumed != int(payloadLength) {
-		d.err = errProducer(fmt.Errorf("%w: denoted payload length (%d) doesn't equal the size of deserialized payload (%d)", ErrInvalidBytes, payloadLength, payloadBytesConsumed))
+		d.err = errProducer(ierrors.Wrapf(ErrInvalidBytes, "denoted payload length (%d) doesn't equal the size of deserialized payload (%d)", payloadLength, payloadBytesConsumed))
 
 		return d
 	}
@@ -1410,13 +1155,13 @@ func (d *Deserializer) ReadString(s *string, lenType SeriLengthPrefixType, errPr
 
 	switch {
 	case maxLen > 0 && strLen > maxLen:
-		d.err = errProducer(fmt.Errorf("%w: string defined to be of %d bytes length but max %d is allowed", ErrDeserializationLengthInvalid, strLen, maxLen))
+		d.err = errProducer(ierrors.Wrapf(ErrDeserializationLengthMaxExceeded, "string defined to be of %d bytes length but max %d is allowed", strLen, maxLen))
 	case minLen > 0 && strLen < minLen:
-		d.err = errProducer(fmt.Errorf("%w: string defined to be of %d bytes length but min %d is required", ErrDeserializationLengthInvalid, strLen, minLen))
+		d.err = errProducer(ierrors.Wrapf(ErrDeserializationLengthMinNotReached, "string defined to be of %d bytes length but min %d is required", strLen, minLen))
 	}
 
 	if len(d.src[d.offset:]) < strLen {
-		d.err = errProducer(fmt.Errorf("%w: data is smaller than (%d) denoted string length of %d", ErrDeserializationNotEnoughData, len(d.src[d.offset:]), strLen))
+		d.err = errProducer(ierrors.Wrapf(ErrDeserializationNotEnoughData, "data is smaller than (%d) denoted string length of %d", len(d.src[d.offset:]), strLen))
 
 		return d
 	}

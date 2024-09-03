@@ -5,9 +5,8 @@ import (
 	"strings"
 	"text/template"
 
-	"golang.org/x/xerrors"
-
 	"github.com/iotaledger/hive.go/codegen"
+	"github.com/iotaledger/hive.go/ierrors"
 	"github.com/iotaledger/hive.go/lo"
 )
 
@@ -23,7 +22,7 @@ import (
 // | params        | string   | the current list of variadic parameters (without types).   | i.e. "arg1, arg2"         |
 // | typedParams   | string   | the current list of variadic parameters (including types). | i.e. "arg1 T1, arg2 T2"   |
 // | types         | string   | the current list of variadic types.                        | i.e. "T1, T2"             |
-// +---------------+----------+------------------------------------------------------------+---------------------------+
+// +---------------+----------+------------------------------------------------------------+---------------------------.
 type Variadic struct {
 	// currentParamCount is the number of parameters of the currently generated variadic instance.
 	currentParamCount int
@@ -65,7 +64,7 @@ func (v *Variadic) GenerateContent() (string, error) {
 	for ; v.currentParamCount <= v.maxParamCount; v.currentParamCount++ {
 		generatedContent, err := v.Template.GenerateContent()
 		if err != nil {
-			return "", xerrors.Errorf("failed to generate variadic %d: %w", v.currentParamCount, err)
+			return "", ierrors.Wrapf(err, "failed to generate variadic %d", v.currentParamCount)
 		}
 
 		variadicInstances = append(variadicInstances, generatedContent)

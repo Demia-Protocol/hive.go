@@ -10,16 +10,12 @@ import (
 	"time"
 
 	"github.com/iotaledger/hive.go/app/daemon"
-	"github.com/iotaledger/hive.go/logger"
+	"github.com/iotaledger/hive.go/ierrors"
+	"github.com/iotaledger/hive.go/log"
 	"github.com/iotaledger/hive.go/runtime/event"
 	"github.com/iotaledger/hive.go/runtime/ioutils"
 	"github.com/iotaledger/hive.go/runtime/options"
 )
-
-// AppSelfShutdownCaller is used to signal a app self shutdown caused by an error.
-func AppSelfShutdownCaller(handler interface{}, params ...interface{}) {
-	handler.(func(reason string, critical bool))(params[0].(string), params[1].(bool))
-}
 
 type selfShutdownRequest struct {
 	message  string
@@ -40,7 +36,7 @@ type Events struct {
 //nolint:revive // better be explicit here
 type ShutdownHandler struct {
 	// the logger used to log events.
-	*logger.WrappedLogger
+	log.Logger
 
 	daemon daemon.Daemon
 
@@ -55,7 +51,7 @@ type ShutdownHandler struct {
 	Events *Events
 }
 
-// WithStopGracePeriod defines the the maximum time to wait for background
+// WithStopGracePeriod defines the maximum time to wait for background
 // processes to finish during shutdown before terminating the app.
 func WithStopGracePeriod(stopGracePeriod time.Duration) options.Option[ShutdownHandler] {
 	return func(s *ShutdownHandler) {
@@ -78,10 +74,9 @@ func WithSelfShutdownLogsFilePath(selfShutdownLogsFilePath string) options.Optio
 }
 
 // NewShutdownHandler creates a new shutdown handler.
-func NewShutdownHandler(log *logger.Logger, daemon daemon.Daemon, opts ...options.Option[ShutdownHandler]) *ShutdownHandler {
-
+func NewShutdownHandler(logger log.Logger, daemon daemon.Daemon, opts ...options.Option[ShutdownHandler]) *ShutdownHandler {
 	gs := options.Apply(&ShutdownHandler{
-		WrappedLogger:   logger.NewWrappedLogger(log),
+		Logger:          logger,
 		daemon:          daemon,
 		stopGracePeriod: 300 * time.Second,
 		gracefulStop:    make(chan os.Signal, 1),
@@ -106,8 +101,7 @@ func (gs *ShutdownHandler) checkSelfShutdownLogsDirectory() error {
 	}
 
 	if err := ioutils.CreateDirectory(shutdownLogsDirectory, 0o700); err != nil {
-		return fmt.Errorf("creating self-shutdown logs directory (%s) failed: %w", shutdownLogsDirectory, err)
-
+		return ierrors.Wrapf(err, "creating self-shutdown logs directory (%s) failed", shutdownLogsDirectory)
 	}
 
 	return nil
@@ -115,8 +109,6 @@ func (gs *ShutdownHandler) checkSelfShutdownLogsDirectory() error {
 
 func (gs *ShutdownHandler) writeSelfShutdownLogFile(msg string, critical bool) {
 	if gs.selfShutdownLogsEnabled {
-
-		//nolint:nosnakecase // false positive
 		f, err := os.OpenFile(gs.selfShutdownLogsFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			gs.LogWarnf("self-shutdown log can't be opened, error: %s", err.Error())
@@ -146,7 +138,6 @@ func (gs *ShutdownHandler) SelfShutdown(msg string, critical bool) {
 
 // Run starts the ShutdownHandler go routine.
 func (gs *ShutdownHandler) Run() error {
-
 	if gs.selfShutdownLogsEnabled {
 		if err := gs.checkSelfShutdownLogsDirectory(); err != nil {
 			return err
@@ -174,7 +165,8 @@ func (gs *ShutdownHandler) Run() error {
 
 		go func() {
 			ts := time.Now()
-			for range time.Tick(1 * time.Second) {
+			ticker := time.NewTicker(1 * time.Second)
+			for range ticker.C {
 				secondsSinceStart := int(time.Since(ts).Seconds())
 
 				if secondsSinceStart <= int(gs.stopGracePeriod.Seconds()) {
@@ -186,7 +178,7 @@ func (gs *ShutdownHandler) Run() error {
 
 					gs.LogWarnf("Received shutdown request - waiting (max %d seconds) to finish processing %s...", int(gs.stopGracePeriod.Seconds())-secondsSinceStart, processList)
 				} else {
-					gs.LogFatalAndExit("Background processes did not terminate in time! Forcing shutdown ...")
+					gs.LogFatal("Background processes did not terminate in time! Forcing shutdown ...")
 				}
 			}
 		}()

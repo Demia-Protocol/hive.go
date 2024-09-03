@@ -1,10 +1,10 @@
 module github.com/iotaledger/hive.go/codegen
 
-go 1.20
+go 1.22
 
 require (
-	github.com/iotaledger/hive.go/lo v0.0.0-20230417083738-41b63759a6b8
-	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
+	github.com/iotaledger/hive.go/ierrors v0.0.0-20240517131232-748f1ce3a2d2
+	github.com/iotaledger/hive.go/lo v0.0.0-20240517131232-748f1ce3a2d2
 )
 
-require github.com/iotaledger/hive.go/constraints v0.0.0-20230417083738-41b63759a6b8 // indirect
+require github.com/iotaledger/hive.go/constraints v0.0.0-20240425095808-113b21573349 // indirect

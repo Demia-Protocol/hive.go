@@ -2,24 +2,23 @@ package profiling
 
 import (
 	"net/http"
-	"time"
-
-	// import pprof.
 	//nolint:gosec // ToDo: register handlers ourselves.
 	_ "net/http/pprof"
 	"runtime"
+	"time"
 
-	"github.com/pkg/errors"
+	"github.com/felixge/fgprof"
 	"go.uber.org/dig"
 
 	"github.com/iotaledger/hive.go/app"
+	"github.com/iotaledger/hive.go/ierrors"
 )
 
 func init() {
 	Component = &app.Component{
 		Name:   "Profiling",
 		Params: params,
-		IsEnabled: func(c *dig.Container) bool {
+		IsEnabled: func(_ *dig.Container) bool {
 			return ParamsProfiling.Enabled
 		},
 		Run: run,
@@ -36,6 +35,8 @@ func run() error {
 
 	bindAddr := ParamsProfiling.BindAddress
 
+	http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
+
 	go func() {
 		Component.LogInfof("You can now access the profiling server using: http://%s/debug/pprof/", bindAddr)
 
@@ -45,7 +46,7 @@ func run() error {
 			ReadHeaderTimeout: 3 * time.Second,
 		}
 
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := server.ListenAndServe(); err != nil && !ierrors.Is(err, http.ErrServerClosed) {
 			Component.LogWarnf("Stopped profiling server due to an error (%s)", err)
 		}
 	}()

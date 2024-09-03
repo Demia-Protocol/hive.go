@@ -24,6 +24,48 @@ func Map[SourceType any, TargetType any](source []SourceType, mapper func(Source
 	return target
 }
 
+// Flatten takes a slice of slices and returns a flattened slice.
+//
+// Given a slice of slices `slices`, flatten iterates over each slice in `slices`,
+// and appends its elements to a new slice `result`. The resulting slice is then
+// returned. If `slices` is empty, flatten returns an empty slice.
+//
+// Example:
+//
+//	slices := [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}
+//	flattened := lo.Flatten(slices)
+//	// flattened is [1 2 3 4 5 6 7 8 9]
+//
+// Note that the input slice `slices` is not modified by this function.
+func Flatten[V any](slices [][]V) []V {
+	var result []V
+
+	for _, slice := range slices {
+		result = append(result, slice...)
+	}
+
+	return result
+}
+
+// Equal checks if two slices are equal.
+//
+// Example:
+//
+//	lo.Equal([]int{1, 2, 3}, []int{1, 2, 3}) // returns true
+func Equal[T comparable](a, b []T) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i, value := range a {
+		if value != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Reduce reduces collection to a value which is the accumulated result of running each element in collection
 // through accumulator, where each successive invocation is supplied the return value of the previous.
 func Reduce[T any, R any](collection []T, accumulator func(R, T) R, initial R) R {
@@ -167,9 +209,18 @@ func PanicOnErr[T any](result T, err error) T {
 	return result
 }
 
+func DropCount[T any](result T, _ int, err error) (T, error) {
+	return result, err
+}
+
 // Max returns the maximum value of the collection.
 func Max[T constraints.Ordered](collection ...T) T {
 	var maxElem T
+	if len(collection) == 0 {
+		return maxElem
+	}
+
+	maxElem = collection[0]
 
 	return Reduce(collection, func(max, value T) T {
 		if Comparator(value, max) > 0 {
@@ -183,6 +234,11 @@ func Max[T constraints.Ordered](collection ...T) T {
 // Min returns the minimum value of the collection.
 func Min[T constraints.Ordered](collection ...T) T {
 	var minElem T
+	if len(collection) == 0 {
+		return minElem
+	}
+
+	minElem = collection[0]
 
 	return Reduce(collection, func(min, value T) T {
 		if Comparator(value, min) < 0 {
@@ -259,4 +315,22 @@ func Compare[A constraints.Ordered](a, b A) int {
 // Void returns a function that discards the return argument of the given function.
 func Void[A, B any](f func(A) B) func(A) {
 	return func(a A) { f(a) }
+}
+
+func CloneSlice[T any, C constraints.Cloneable[T]](slice []C) []T {
+	cpy := make([]T, len(slice))
+	for i, elem := range slice {
+		cpy[i] = elem.Clone()
+	}
+
+	return cpy
+}
+
+func CloneMap[K comparable, V any, C constraints.Cloneable[V]](in map[K]C) map[K]V {
+	cpy := make(map[K]V, len(in))
+	for k, v := range in {
+		cpy[k] = v.Clone()
+	}
+
+	return cpy
 }

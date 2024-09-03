@@ -5,11 +5,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/iotaledger/hive.go/ierrors"
 )
 
 var (
-	ErrMergedContextCanceled = errors.New("merged context canceled")
+	ErrMergedContextCanceled = ierrors.New("merged context canceled")
 )
 
 // mergedContext is a merged context based on two contexts.
@@ -59,7 +59,7 @@ func MergeContexts(ctxPrimary context.Context, ctxSecondary context.Context) (co
 	go func() {
 		select {
 		case <-mc.cancelCtx.Done():
-			setCtxDoneFunc(ErrMergedContextCanceled)
+			setCtxDoneFunc(ierrors.Join(context.Canceled, ErrMergedContextCanceled))
 		case <-mc.ctxPrimary.Done():
 			setCtxDoneFunc(mc.ctxPrimary.Err())
 		case <-mc.ctxSecondary.Done():
@@ -68,7 +68,15 @@ func MergeContexts(ctxPrimary context.Context, ctxSecondary context.Context) (co
 	}()
 
 	var mergedCancelFunc context.CancelFunc = func() {
-		setCtxDoneFunc(ErrMergedContextCanceled)
+		setCtxDoneFunc(ierrors.Join(context.Canceled, ErrMergedContextCanceled))
+	}
+
+	// check if the given contexts are already canceled during initialization
+	if mc.ctxPrimary.Err() != nil {
+		setCtxDoneFunc(mc.ctxPrimary.Err())
+	}
+	if mc.ctxSecondary.Err() != nil {
+		setCtxDoneFunc(mc.ctxSecondary.Err())
 	}
 
 	return mc, mergedCancelFunc

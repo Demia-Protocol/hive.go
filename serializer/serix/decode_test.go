@@ -1,7 +1,9 @@
 package serix_test
 
 import (
+	"context"
 	"reflect"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,13 +17,20 @@ func TestDecode_Slice(t *testing.T) {
 	t.Parallel()
 	testObj := Bools{true, false, true, true}
 	ts := serix.TypeSettings{}.WithLengthPrefixType(boolsLenType)
-	testDecode(t, testObj, serix.WithTypeSettings(ts))
+	testDecode(t, ctx, testObj, serix.WithTypeSettings(ts))
+}
+
+func TestDecode_EmptySlice(t *testing.T) {
+	t.Parallel()
+	testObj := Bools{}
+	ts := serix.TypeSettings{}.WithLengthPrefixType(boolsLenType)
+	testDecode(t, ctx, testObj, serix.WithTypeSettings(ts))
 }
 
 func TestDecode_Struct(t *testing.T) {
 	t.Parallel()
 	testObj := NewSimpleStruct()
-	testDecode(t, testObj)
+	testDecode(t, ctx, testObj)
 }
 
 func TestDecode_Interface(t *testing.T) {
@@ -34,20 +43,28 @@ func TestDecode_Interface(t *testing.T) {
 			},
 		},
 	}
-	testDecode(t, testObj)
+
+	var called atomic.Int64
+
+	//lint:ignore SA1029 // it's fine in the tests
+	testDecode(t, context.WithValue(ctx, "contextValue", func() {
+		called.Add(1)
+	}), testObj)
+
+	require.Equal(t, int64(1), called.Load())
 }
 
 func TestDecode_Pointer(t *testing.T) {
 	t.Parallel()
 	ss := NewSimpleStruct()
 	testObj := &ss
-	testDecode(t, testObj)
+	testDecode(t, ctx, testObj)
 }
 
 func TestDecode_Optional(t *testing.T) {
 	t.Parallel()
 	testObj := StructWithOptionalField{Optional: nil}
-	testDecode(t, testObj)
+	testDecode(t, ctx, testObj)
 }
 
 func TestDecode_EmbeddedStructs(t *testing.T) {
@@ -56,7 +73,15 @@ func TestDecode_EmbeddedStructs(t *testing.T) {
 		unexportedStruct: unexportedStruct{Foo: 1},
 		ExportedStruct:   ExportedStruct{Bar: 2},
 	}
-	testDecode(t, testObj)
+
+	var called atomic.Int64
+
+	//lint:ignore SA1029 // it's fine in the tests
+	testDecode(t, context.WithValue(ctx, "contextValue", func() {
+		called.Add(1)
+	}), testObj)
+
+	require.Equal(t, int64(2), called.Load())
 }
 
 func TestDecode_Map(t *testing.T) {
@@ -65,20 +90,36 @@ func TestDecode_Map(t *testing.T) {
 		0: 2,
 		1: 4,
 	}
-	testDecode(t, testObj, serix.WithTypeSettings(serix.TypeSettings{}.WithLengthPrefixType(mapLenType)))
+	testDecode(t, ctx, testObj, serix.WithTypeSettings(serix.TypeSettings{}.WithLengthPrefixType(mapLenType)))
 }
 
 func TestDecode_Deserializable(t *testing.T) {
 	t.Parallel()
 	testObject := CustomSerializable(2)
-	testDecode(t, testObject)
+
+	var called atomic.Int64
+
+	//lint:ignore SA1029 // it's fine in the tests
+	testDecode(t, context.WithValue(ctx, "contextValue", func() {
+		called.Add(1)
+	}), testObject)
+
+	require.Equal(t, int64(1), called.Load())
 }
 
 func TestDecode_DeserializablePointer(t *testing.T) {
 	t.Parallel()
 	cs := CustomSerializable(2)
 	testObject := &cs
-	testDecode(t, testObject)
+
+	var called atomic.Int64
+
+	//lint:ignore SA1029 // it's fine in the tests
+	testDecode(t, context.WithValue(ctx, "contextValue", func() {
+		called.Add(1)
+	}), testObject)
+
+	require.Equal(t, int64(1), called.Load())
 }
 
 func TestDecode_SyntacticValidation(t *testing.T) {
@@ -87,14 +128,6 @@ func TestDecode_SyntacticValidation(t *testing.T) {
 	bytesRead, err := testAPI.Decode(ctx, nil, testObj, serix.WithValidation())
 	require.Zero(t, bytesRead)
 	assert.ErrorIs(t, err, errSyntacticValidation)
-}
-
-func TestDecode_BytesValidation(t *testing.T) {
-	t.Parallel()
-	testObj := &ObjectForBytesValidation{}
-	bytesRead, err := testAPI.Decode(ctx, nil, testObj, serix.WithValidation())
-	require.Zero(t, bytesRead)
-	assert.ErrorIs(t, err, errBytesValidation)
 }
 
 func TestDecode_ArrayRules(t *testing.T) {
@@ -106,10 +139,10 @@ func TestDecode_ArrayRules(t *testing.T) {
 	ts := serix.TypeSettings{}.WithLengthPrefixType(boolsLenType).WithArrayRules(rules)
 	bytesRead, err := testAPI.Decode(ctx, bytes, testObj, serix.WithValidation(), serix.WithTypeSettings(ts))
 	require.Zero(t, bytesRead)
-	assert.Contains(t, err.Error(), "min count of elements within the array not reached")
+	require.ErrorIs(t, err, serializer.ErrArrayValidationMinElementsNotReached)
 }
 
-func testDecode(t testing.TB, expected serializer.Serializable, opts ...serix.Option) {
+func testDecode(t testing.TB, ctx context.Context, expected serializer.Serializable, opts ...serix.Option) {
 	bytes, err := expected.Serialize(defaultSeriMode, nil)
 	require.NoError(t, err)
 	got := reflect.New(reflect.TypeOf(expected)).Elem()

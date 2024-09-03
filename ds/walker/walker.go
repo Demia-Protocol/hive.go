@@ -3,7 +3,9 @@ package walker
 import (
 	"container/list"
 
-	"github.com/iotaledger/hive.go/ds/set"
+	"github.com/iotaledger/hive.go/ds/orderedmap"
+	"github.com/iotaledger/hive.go/ds/types"
+	"github.com/iotaledger/hive.go/lo"
 )
 
 // region Walker /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -11,7 +13,7 @@ import (
 // Walker implements a generic data structure that simplifies walks over collections or data structures.
 type Walker[T comparable] struct {
 	stack           *list.List
-	pushedElements  set.Set[T]
+	pushedElements  *orderedmap.OrderedMap[T, types.Empty]
 	walkStopped     bool
 	revisitElements bool
 }
@@ -21,7 +23,7 @@ type Walker[T comparable] struct {
 func New[T comparable](revisitElements ...bool) *Walker[T] {
 	return &Walker[T]{
 		stack:           list.New(),
-		pushedElements:  set.New[T](),
+		pushedElements:  orderedmap.New[T, types.Empty](),
 		revisitElements: len(revisitElements) > 0 && revisitElements[0],
 	}
 }
@@ -41,12 +43,13 @@ func (w *Walker[T]) Next() (nextElement T) {
 	currentEntry := w.stack.Front()
 	w.stack.Remove(currentEntry)
 
+	//nolint:forcetypeassert // false positive, we know that the element is of type T
 	return currentEntry.Value.(T)
 }
 
 // Push adds a new element to the walk, which can consequently be retrieved by calling the Next method.
 func (w *Walker[T]) Push(nextElement T) (walker *Walker[T]) {
-	if !w.pushedElements.Add(nextElement) && !w.revisitElements {
+	if lo.Return2(w.pushedElements.Set(nextElement, types.Void)) && !w.revisitElements {
 		return w
 	}
 
@@ -67,7 +70,7 @@ func (w *Walker[T]) PushAll(nextElements ...T) (walker *Walker[T]) {
 // PushFront adds a new element to the front of the queue, which can consequently be retrieved by calling the Next method.
 func (w *Walker[T]) PushFront(nextElements ...T) (walker *Walker[T]) {
 	for _, nextElement := range nextElements {
-		if !w.pushedElements.Add(nextElement) && !w.revisitElements {
+		if lo.Return2(w.pushedElements.Set(nextElement, types.Void)) && !w.revisitElements {
 			return w
 		}
 
@@ -87,9 +90,11 @@ func (w *Walker[T]) WalkStopped() bool {
 	return w.walkStopped
 }
 
-// Reset removes all queued elements.
+// Reset removes all queued elements and reset walkStopped.
 func (w *Walker[T]) Reset() {
 	w.stack.Init()
+	w.pushedElements.Clear()
+	w.walkStopped = false
 }
 
 // endregion ///////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -1,10 +1,8 @@
-//nolint:scopelint // we don't care about these linters in test cases
 package serix_test
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -18,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/blake2b"
 
+	"github.com/iotaledger/hive.go/ierrors"
+	"github.com/iotaledger/hive.go/serializer/v2"
 	"github.com/iotaledger/hive.go/serializer/v2/serix"
 )
 
@@ -30,8 +30,8 @@ func must(err error) {
 type Identifier [blake2b.Size256]byte
 
 type serializableStruct struct {
-	bytes Identifier `serix:"0"`
-	index uint64     `serix:"1"`
+	bytes Identifier `serix:""`
+	index uint64     `serix:""`
 }
 
 func (s serializableStruct) EncodeJSON() (any, error) {
@@ -41,7 +41,7 @@ func (s serializableStruct) EncodeJSON() (any, error) {
 func (s *serializableStruct) DecodeJSON(val any) error {
 	serialized, ok := val.(string)
 	if !ok {
-		return errors.New("incorrect type")
+		return ierrors.New("incorrect type")
 	}
 
 	parts := strings.Split(serialized, ":")
@@ -55,6 +55,7 @@ func (s *serializableStruct) DecodeJSON(val any) error {
 	}
 	copy(s.bytes[:], bytes)
 	s.index = uint64(idx)
+
 	return nil
 }
 
@@ -75,19 +76,19 @@ func TestMapEncodeDecode(t *testing.T) {
 			name: "basic types",
 			paras: func() paras {
 				type example struct {
-					Uint64    uint64  `serix:"0,mapKey=uint64"`
-					Uint32    uint32  `serix:"1,mapKey=uint32"`
-					Uint16    uint16  `serix:"2,mapKey=uint16"`
-					Uint8     uint8   `serix:"3,mapKey=uint8"`
-					Int64     int64   `serix:"4,mapKey=int64"`
-					Int32     int32   `serix:"5,mapKey=int32"`
-					Int16     int16   `serix:"6,mapKey=int16"`
-					Int8      int8    `serix:"7,mapKey=int8"`
-					ZeroInt32 int32   `serix:"8,mapKey=zeroInt32,omitempty"`
-					Float32   float32 `serix:"9,mapKey=float32"`
-					Float64   float64 `serix:"10,mapKey=float64"`
-					String    string  `serix:"11,mapKey=string"`
-					Bool      bool    `serix:"12,mapKey=bool"`
+					Uint64    uint64  `serix:""`
+					Uint32    uint32  `serix:""`
+					Uint16    uint16  `serix:""`
+					Uint8     uint8   `serix:""`
+					Int64     int64   `serix:""`
+					Int32     int32   `serix:""`
+					Int16     int16   `serix:""`
+					Int8      int8    `serix:""`
+					ZeroInt32 int32   `serix:",omitempty"`
+					Float32   float32 `serix:""`
+					Float64   float64 `serix:""`
+					String    string  `serix:""`
+					Bool      bool    `serix:""`
 				}
 
 				api := serix.NewAPI()
@@ -122,8 +123,8 @@ func TestMapEncodeDecode(t *testing.T) {
 				"int32": -32,
 				"int16": -16,
 				"int8": -8,
-				"float32": "3.3000001311302185E-01",
-				"float64": "4.4E-01",
+				"float32": "0.33000001311302185",
+				"float64": "0.44",
 				"string": "abcd",
 				"bool": true
 			}`,
@@ -132,7 +133,7 @@ func TestMapEncodeDecode(t *testing.T) {
 			name: "big int",
 			paras: func() paras {
 				type example struct {
-					BigInt *big.Int `serix:"0,mapKey=bigInt"`
+					BigInt *big.Int `serix:""`
 				}
 
 				api := serix.NewAPI()
@@ -154,7 +155,7 @@ func TestMapEncodeDecode(t *testing.T) {
 			name: "map",
 			paras: func() paras {
 				type example struct {
-					Map map[string]string `serix:"0,mapKey=map"`
+					Map map[string]string `serix:""`
 				}
 
 				api := serix.NewAPI()
@@ -181,10 +182,10 @@ func TestMapEncodeDecode(t *testing.T) {
 			paras: func() paras {
 
 				type example struct {
-					ByteSlice         []byte    `serix:"0,mapKey=byteSlice"`
-					Array             [5]byte   `serix:"1,mapKey=array"`
-					SliceOfByteSlices [][]byte  `serix:"3,mapKey=sliceOfByteSlices"`
-					SliceOfByteArrays [][3]byte `serix:"4,mapKey=sliceOfByteArrays"`
+					ByteSlice         []byte    `serix:""`
+					Array             [5]byte   `serix:""`
+					SliceOfByteSlices [][]byte  `serix:""`
+					SliceOfByteArrays [][3]byte `serix:""`
 				}
 
 				api := serix.NewAPI()
@@ -225,11 +226,11 @@ func TestMapEncodeDecode(t *testing.T) {
 			paras: func() paras {
 				type (
 					inner struct {
-						String string `serix:"0,mapKey=string"`
+						String string `serix:""`
 					}
 
 					example struct {
-						inner `serix:"0"`
+						inner `serix:""`
 					}
 				)
 
@@ -257,19 +258,19 @@ func TestMapEncodeDecode(t *testing.T) {
 					OtherObj           [2]byte
 
 					example struct {
-						Interface InterfaceType `serix:"0,mapKey=interface"`
-						Other     *OtherObj     `serix:"1,mapKey=other"`
+						Interface InterfaceType `serix:""`
+						Other     *OtherObj     `serix:""`
 					}
 				)
 
 				api := serix.NewAPI()
 				must(api.RegisterTypeSettings(example{}, serix.TypeSettings{}.WithObjectType(uint8(33))))
 				must(api.RegisterTypeSettings(InterfaceTypeImpl1{},
-					serix.TypeSettings{}.WithObjectType(uint8(5)).WithMapKey("customInnerKey")),
+					serix.TypeSettings{}.WithObjectType(uint8(5)).WithFieldKey("customInnerKey")),
 				)
 				must(api.RegisterInterfaceObjects((*InterfaceType)(nil), (*InterfaceTypeImpl1)(nil)))
 				must(api.RegisterTypeSettings(OtherObj{},
-					serix.TypeSettings{}.WithObjectType(uint8(2)).WithMapKey("otherObjKey")),
+					serix.TypeSettings{}.WithObjectType(uint8(2)).WithFieldKey("otherObjKey")),
 				)
 
 				return paras{
@@ -298,14 +299,14 @@ func TestMapEncodeDecode(t *testing.T) {
 				type (
 					Interface interface{}
 					Impl1     struct {
-						String string `serix:"0,mapKey=string"`
+						String string `serix:""`
 					}
 					Impl2 struct {
-						Uint16 uint16 `serix:"0,mapKey=uint16"`
+						Uint16 uint16 `serix:""`
 					}
 
 					example struct {
-						Slice []Interface `serix:"0,mapKey=slice"`
+						Slice []Interface `serix:""`
 					}
 				)
 
@@ -343,8 +344,8 @@ func TestMapEncodeDecode(t *testing.T) {
 			name: "no map key",
 			paras: func() paras {
 				type example struct {
-					CaptainHook string `serix:"0"`
-					LiquidSoul  int64  `serix:"1"`
+					CaptainHook string `serix:""`
+					LiquidSoul  int64  `serix:""`
 				}
 
 				api := serix.NewAPI()
@@ -368,14 +369,15 @@ func TestMapEncodeDecode(t *testing.T) {
 			name: "time",
 			paras: func() paras {
 				type example struct {
-					CreationDate time.Time `serix:"0"`
+					CreationDate time.Time `serix:""`
 				}
 
 				api := serix.NewAPI()
 				must(api.RegisterTypeSettings(example{}, serix.TypeSettings{}.WithObjectType(uint8(23))))
 
-				exampleTime, err := time.Parse(time.RFC3339Nano, "2022-08-12T12:51:18.120072+02:00")
+				uint64Time, err := serix.DecodeUint64("1660301478120072000")
 				require.NoError(t, err)
+				exampleTime := serializer.Uint64ToTime(uint64Time)
 
 				return paras{
 					api: api,
@@ -386,7 +388,7 @@ func TestMapEncodeDecode(t *testing.T) {
 			}(),
 			expected: `{
 				"type": 23,
- 				"creationDate": "2022-08-12T12:51:18.120072+02:00"
+ 				"creationDate": "1660301478120072000"
 			}`,
 		},
 
@@ -394,7 +396,7 @@ func TestMapEncodeDecode(t *testing.T) {
 			name: "serializable",
 			paras: func() paras {
 				type example struct {
-					Entries map[serializableStruct]struct{} `serix:"0"`
+					Entries map[serializableStruct]struct{} `serix:""`
 				}
 
 				api := serix.NewAPI()
@@ -404,10 +406,10 @@ func TestMapEncodeDecode(t *testing.T) {
 					api: api,
 					in: &example{
 						Entries: map[serializableStruct]struct{}{
-							serializableStruct{
+							{
 								bytes: blake2b.Sum256([]byte("test")),
 								index: 1,
-							}: struct{}{},
+							}: {},
 						},
 					},
 				}

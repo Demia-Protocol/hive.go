@@ -81,14 +81,6 @@ func TestEncode_SyntacticValidation(t *testing.T) {
 	assert.ErrorIs(t, err, errSyntacticValidation)
 }
 
-func TestEncode_BytesValidation(t *testing.T) {
-	t.Parallel()
-	testObj := ObjectForBytesValidation{}
-	got, err := testAPI.Encode(ctx, testObj, serix.WithValidation())
-	require.Nil(t, got)
-	assert.ErrorIs(t, err, errBytesValidation)
-}
-
 func TestEncode_ArrayRules(t *testing.T) {
 	t.Parallel()
 	rules := &serix.ArrayRules{Min: 5}
@@ -96,7 +88,7 @@ func TestEncode_ArrayRules(t *testing.T) {
 	ts := serix.TypeSettings{}.WithLengthPrefixType(serix.LengthPrefixTypeAsUint32).WithArrayRules(rules)
 	got, err := testAPI.Encode(ctx, testObj, serix.WithValidation(), serix.WithTypeSettings(ts))
 	require.Nil(t, got)
-	assert.Contains(t, err.Error(), "min count of elements within the array not reached")
+	require.ErrorIs(t, err, serializer.ErrArrayValidationMinElementsNotReached)
 }
 
 func testEncode(t testing.TB, testObj serializer.Serializable, opts ...serix.Option) {

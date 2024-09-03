@@ -1,176 +1,50 @@
 package ads
 
 import (
-	"sync"
-
-	"github.com/celestiaorg/smt"
-	"github.com/pkg/errors"
-	"golang.org/x/crypto/blake2b"
-
 	"github.com/iotaledger/hive.go/ds/types"
 	"github.com/iotaledger/hive.go/kvstore"
-	"github.com/iotaledger/hive.go/kvstore/typedkey"
-	"github.com/iotaledger/hive.go/lo"
-	"github.com/iotaledger/hive.go/serializer/v2"
 )
 
-type Map[K, V serializer.Byter, KPtr serializer.MarshalablePtr[K], VPtr serializer.MarshalablePtr[V]] struct {
-	rawKeysStore kvstore.KVStore
-	tree         *smt.SparseMerkleTree
-	root         *typedkey.Bytes
-	mutex        sync.RWMutex
+// Map is a map that can produce proofs for its values which can be verified against a known merkle root
+// that is formed using a sparse merkle tree.
+type Map[IdentifierType types.IdentifierType, K, V any] interface {
+	// Set sets the given key to the given value.
+	Set(key K, value V) error
+
+	// Get returns the value for the given key.
+	Get(key K) (value V, exists bool, err error)
+
+	// Has returns true if the given key exists.
+	Has(key K) (exists bool, err error)
+
+	// Delete deletes the given key.
+	Delete(key K) (deleted bool, err error)
+
+	// Stream streams all key-value pairs to the given consumer function.
+	Stream(consumerFunc func(key K, value V) error) error
+
+	// Commit persists the changes to the underlying store.
+	Commit() error
+
+	// Root returns the root of the sparse merkle tree.
+	Root() IdentifierType
+
+	// Size returns the number of elements in the map.
+	Size() int
+
+	// WasRestoredFromStorage returns true if the map was restored from an existing storage.
+	WasRestoredFromStorage() bool
 }
 
-func NewMap[K, V serializer.Byter, KPtr serializer.MarshalablePtr[K], VPtr serializer.MarshalablePtr[V]](store kvstore.KVStore) (newMap *Map[K, V, KPtr, VPtr]) {
-	newMap = &Map[K, V, KPtr, VPtr]{
-		rawKeysStore: lo.PanicOnErr(store.WithExtendedRealm([]byte{PrefixRawKeysStorage})),
-		tree: smt.NewSparseMerkleTree(
-			lo.PanicOnErr(store.WithExtendedRealm([]byte{PrefixSMTKeysStorage})),
-			lo.PanicOnErr(store.WithExtendedRealm([]byte{PrefixSMTValuesStorage})),
-			lo.PanicOnErr(blake2b.New256(nil)),
-		),
-		root: typedkey.NewBytes(store, PrefixRootKey),
-	}
-
-	if root := newMap.root.Get(); len(root) != 0 {
-		newMap.tree.SetRoot(root)
-	}
-
-	return
-}
-
-// Root returns the root of the state sparse merkle tree at the latest committed slot.
-func (m *Map[K, V, KPtr, VPtr]) Root() (root types.Identifier) {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-
-	copy(root[:], m.tree.Root())
-
-	return
-}
-
-// Set sets the output to unspent outputs set.
-func (m *Map[K, V, KPtr, VPtr]) Set(key K, value VPtr) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	valueBytes := lo.PanicOnErr(value.Bytes())
-	if len(valueBytes) == 0 {
-		panic("value cannot be empty")
-	}
-
-	keyBytes := lo.PanicOnErr(key.Bytes())
-
-	m.root.Set(lo.PanicOnErr(m.tree.Update(keyBytes, valueBytes)))
-
-	if err := m.rawKeysStore.Set(keyBytes, []byte{}); err != nil {
-		panic(err)
-	}
-}
-
-// Delete removes the key from the map.
-func (m *Map[K, V, KPtr, VPtr]) Delete(key K) (deleted bool) {
-	if m == nil {
-		return
-	}
-
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	keyBytes := lo.PanicOnErr(key.Bytes())
-	if deleted = m.has(keyBytes); !deleted {
-		return
-	}
-
-	m.root.Set(lo.PanicOnErr(m.tree.Delete(keyBytes)))
-
-	if err := m.rawKeysStore.Delete(keyBytes); err != nil {
-		panic(err)
-	}
-
-	return
-}
-
-// Has returns true if the key is in the set.
-func (m *Map[K, V, KPtr, VPtr]) Has(key K) (has bool) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	return m.has(lo.PanicOnErr(key.Bytes()))
-}
-
-// Get returns the value for the given key.
-func (m *Map[K, V, KPtr, VPtr]) Get(key K) (value VPtr, exists bool) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	valueBytes, err := m.tree.Get(lo.PanicOnErr(key.Bytes()))
-	if err != nil {
-		if errors.Is(err, kvstore.ErrKeyNotFound) {
-			return nil, false
-		}
-
-		panic(err)
-	}
-
-	if len(valueBytes) == 0 {
-		return nil, false
-	}
-
-	value = new(V)
-	if lo.PanicOnErr(value.FromBytes(valueBytes)) != len(valueBytes) {
-		panic("failed to parse entire value")
-	}
-
-	return value, true
-}
-
-// Stream streams all the keys and values.
-func (m *Map[K, V, KPtr, VPtr]) Stream(callback func(key K, value VPtr) bool) (err error) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	if iterationErr := m.rawKeysStore.Iterate([]byte{}, func(key kvstore.Key, _ kvstore.Value) bool {
-		value, valueErr := m.tree.Get(key)
-		if valueErr != nil {
-			err = errors.Wrapf(valueErr, "failed to get value for key %s", key)
-			return false
-		}
-
-		var kPtr KPtr = new(K)
-		if _, keyErr := kPtr.FromBytes(key); keyErr != nil {
-			err = errors.Wrapf(keyErr, "failed to deserialize key %s", key)
-			return false
-		}
-
-		var valuePtr VPtr = new(V)
-		if _, valueErr := valuePtr.FromBytes(value); valueErr != nil {
-			err = errors.Wrapf(valueErr, "failed to deserialize value %s", value)
-			return false
-		}
-
-		return callback(*kPtr, valuePtr)
-	}); iterationErr != nil {
-		err = errors.Wrapf(iterationErr, "failed to iterate over raw keys")
-	}
-
-	return
-}
-
-// has returns true if the key is in the map.
-func (m *Map[K, V, KPtr, VPtr]) has(keyBytes []byte) (has bool) {
-	if m == nil {
-		return false
-	}
-
-	has, err := m.tree.Has(keyBytes)
-	if err != nil {
-		if errors.Is(err, kvstore.ErrKeyNotFound) {
-			return false
-		}
-
-		panic(err)
-	}
-
-	return
+// NewMap creates a new AuthenticatedMap.
+func NewMap[IdentifierType types.IdentifierType, K, V any](
+	store kvstore.KVStore,
+	identifierToBytes kvstore.ObjectToBytes[IdentifierType],
+	bytesToIdentifier kvstore.BytesToObject[IdentifierType],
+	keyToBytes kvstore.ObjectToBytes[K],
+	bytesToKey kvstore.BytesToObject[K],
+	valueToBytes kvstore.ObjectToBytes[V],
+	bytesToValue kvstore.BytesToObject[V],
+) Map[IdentifierType, K, V] {
+	return newAuthenticatedMap[IdentifierType](store, identifierToBytes, bytesToIdentifier, keyToBytes, bytesToKey, valueToBytes, bytesToValue)
 }
