@@ -46,7 +46,7 @@ func New(store kvstore.KVStore, objectFactory StorableObjectFactory, optionalOpt
 	return o
 }
 
-func (objectStorage *ObjectStorage) Put(object StorableObject) CachedObject {
+func (objectStorage *ObjectStorage) Put(object StorableObject) (CachedObject, error) {
 	if objectStorage.shutdown.Load() {
 		panic("trying to access shutdown object storage")
 	}
@@ -54,7 +54,7 @@ func (objectStorage *ObjectStorage) Put(object StorableObject) CachedObject {
 	return objectStorage.putObjectInCache(object)
 }
 
-func (objectStorage *ObjectStorage) Store(object StorableObject) CachedObject {
+func (objectStorage *ObjectStorage) Store(object StorableObject) (CachedObject, error) {
 	if objectStorage.shutdown.Load() {
 		panic("trying to access shutdown object storage")
 	}
@@ -942,7 +942,8 @@ func (objectStorage *ObjectStorage) deleteElementFromPartitionedCache(key []byte
 	return elementExists
 }
 
-func (objectStorage *ObjectStorage) putObjectInCache(object StorableObject) CachedObject {
+func (objectStorage *ObjectStorage) putObjectInCache(object StorableObject) (CachedObject, error) {
+	//func (objectStorage *ObjectStorage) putObjectInCache(object StorableObject) CachedObject {
 	// retrieve the cache entry
 	cachedObject, cacheHit := objectStorage.accessCache(object.ObjectStorageKey(), true)
 
@@ -951,17 +952,19 @@ func (objectStorage *ObjectStorage) putObjectInCache(object StorableObject) Cach
 		// try to replace the object if its is empty
 		result, updated := objectStorage.updateEmptyCachedObject(cachedObject, object)
 		if !updated {
-			panic("tried to replace non-empty object in cache")
+			return nil, errors.New("Tried to replace non-empty object in cache")
+			//panic("tried to replace non-empty object in cache")
 		}
 
-		return result
+		//return result
+		return result, nil
 	}
 
 	// publish the result to the cached object and return
 	cachedObject.publishResult(object)
 	cachedObject.storeOnCreation()
 
-	return wrapCachedObject(cachedObject, 0)
+	return wrapCachedObject(cachedObject, 0), nil
 }
 
 // LoadObjectFromStore loads a storable object from the persistence layer.

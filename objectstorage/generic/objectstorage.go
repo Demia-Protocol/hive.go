@@ -50,13 +50,21 @@ func NewInterfaceStorage[T StorableObject](store kvstore.KVStore, objectFactory 
 }
 
 // Put adds the given object in the ObjectStorage cache.
-func (o *ObjectStorage[T]) Put(object T) *CachedObject[T] {
-	return newCachedObject[T](o.ObjectStorage.Put(object))
+func (o *ObjectStorage[T]) Put(object T) (*CachedObject[T], error) {
+	cached, err := o.ObjectStorage.Put(object)
+	if err != nil {
+		return nil, err
+	}
+	return newCachedObject[T](cached), nil
 }
 
 // Store stores the given object in the ObjectStorage.
-func (o *ObjectStorage[T]) Store(object T) *CachedObject[T] {
-	return newCachedObject[T](o.ObjectStorage.Store(object))
+func (o *ObjectStorage[T]) Store(object T) (*CachedObject[T], error) {
+	cached, err := o.ObjectStorage.Put(object)
+	if err != nil {
+		return nil, err
+	}
+	return newCachedObject[T](cached), nil
 }
 
 // GetSize returns the size of the ObjectStorage.
