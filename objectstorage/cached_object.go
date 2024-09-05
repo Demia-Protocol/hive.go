@@ -36,7 +36,7 @@ type CachedObjectImpl struct {
 	blindDelete         atomic.Bool
 	wg                  sync.WaitGroup
 	valueMutex          syncutils.RWMutex
-	transactionMutex    syncutils.RWMultiMutex
+	transactionMutex    RWMultiMutex
 }
 
 func newCachedObject(database *ObjectStorage, key []byte) (result *CachedObjectImpl) {
