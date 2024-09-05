@@ -780,6 +780,26 @@ func (d *Deserializer) ReadBytes(slice *[]byte, numBytes int, errProducer ErrPro
 	return d
 }
 
+// ReadArrayOf32Bytes reads an array of 32 bytes.
+func (d *Deserializer) ReadArrayOf32Bytes(arr *ArrayOf32Bytes, errProducer ErrProducer) *Deserializer {
+	if d.err != nil {
+		return d
+	}
+	const length = 32
+
+	l := len(d.src[d.offset:])
+	if l < length {
+		d.err = errProducer(ErrDeserializationNotEnoughData)
+
+		return d
+	}
+
+	copy(arr[:], d.src[d.offset:d.offset+length])
+	d.offset += length
+
+	return d
+}
+
 // ReadSliceOfArraysOf32Bytes reads a slice of arrays of 32 bytes.
 func (d *Deserializer) ReadSliceOfArraysOf32Bytes(slice *SliceOfArraysOf32Bytes, deSeriMode DeSerializationMode, lenType SeriLengthPrefixType, arrayRules *ArrayRules, errProducer ErrProducer) *Deserializer {
 	if d.err != nil {
