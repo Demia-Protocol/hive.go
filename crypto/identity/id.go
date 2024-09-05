@@ -12,7 +12,6 @@ import (
 	"github.com/iotaledger/hive.go/crypto/ed25519"
 	"github.com/iotaledger/hive.go/ierrors"
 	"github.com/iotaledger/hive.go/lo"
-	"github.com/iotaledger/hive.go/serializer/v2/marshalutil"
 	"github.com/iotaledger/hive.go/serializer/v2/serix"
 )
 
@@ -30,20 +29,6 @@ type ID [IDLength]byte
 // NewID computes the ID corresponding to the given public key.
 func NewID(key ed25519.PublicKey) ID {
 	return sha256.Sum256(lo.PanicOnErr(key.Bytes()))
-}
-
-// IDFromMarshalUtil unmarshals an ID using a MarshalUtil (for easier unmarshalling).
-func IDFromMarshalUtil(marshalUtil *marshalutil.MarshalUtil) (id ID, err error) {
-	idBytes, err := marshalUtil.ReadBytes(IDLength)
-	if err != nil {
-		err = ierrors.Wrapf(ErrParseBytesFailed, "failed to parse ID: %w", err)
-
-		return
-	}
-
-	copy(id[:], idBytes)
-
-	return
 }
 
 // Bytes returns the byte slice representation of the ID.

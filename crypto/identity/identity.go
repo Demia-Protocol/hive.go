@@ -4,7 +4,6 @@ package identity
 
 import (
 	"github.com/iotaledger/hive.go/crypto/ed25519"
-	"github.com/iotaledger/hive.go/serializer/v2/marshalutil"
 )
 
 // LocalIdentity is a node's identity.
@@ -19,26 +18,6 @@ func New(publicKey ed25519.PublicKey) *Identity {
 		id:        NewID(publicKey),
 		publicKey: publicKey,
 	}
-}
-
-func Parse(marshalUtil *marshalutil.MarshalUtil, optionalTargetObject ...*Identity) (result *Identity, err error) {
-	// determine the target object that will hold the unmarshaled information
-	switch len(optionalTargetObject) {
-	case 0:
-		result = &Identity{}
-	case 1:
-		result = optionalTargetObject[0]
-	default:
-		panic("too many arguments in call to Parse")
-	}
-
-	result.publicKey, err = ed25519.ParsePublicKey(marshalUtil)
-	if err != nil {
-		return
-	}
-	result.id = NewID(result.publicKey)
-
-	return
 }
 
 func (i Identity) ID() ID {
