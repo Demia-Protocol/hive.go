@@ -14,6 +14,30 @@ import (
 )
 
 type (
+	// ArrayOf12Bytes is an array of 12 bytes.
+	ArrayOf12Bytes = [12]byte
+
+	// ArrayOf20Bytes is an array of 20 bytes.
+	ArrayOf20Bytes = [20]byte
+
+	// ArrayOf32Bytes is an array of 32 bytes.
+	ArrayOf32Bytes = [32]byte
+
+	// ArrayOf38Bytes is an array of 38 bytes.
+	ArrayOf38Bytes = [38]byte
+
+	// ArrayOf64Bytes is an array of 64 bytes.
+	ArrayOf64Bytes = [64]byte
+
+	// ArrayOf49Bytes is an array of 49 bytes.
+	ArrayOf49Bytes = [49]byte
+
+	// SliceOfArraysOf32Bytes is a slice of arrays of which each is 32 bytes.
+	SliceOfArraysOf32Bytes = []ArrayOf32Bytes
+
+	// SliceOfArraysOf64Bytes is a slice of arrays of which each is 64 bytes.
+	SliceOfArraysOf64Bytes = []ArrayOf64Bytes
+
 	// ErrProducer might produce an error.
 	ErrProducer func(err error) error
 
@@ -192,6 +216,20 @@ func (s *Serializer) WriteByte(data byte, errProducer ErrProducer) *Serializer {
 	}
 
 	return s
+}
+
+// Write32BytesArraySlice writes a slice of arrays of 32 bytes to the Serializer.
+func (s *Serializer) Write32BytesArraySlice(slice SliceOfArraysOf32Bytes, deSeriMode DeSerializationMode, lenType SeriLengthPrefixType, arrayRules *ArrayRules, errProducer ErrProducer) *Serializer {
+	if s.err != nil {
+		return s
+	}
+
+	data := make([][]byte, len(slice))
+	for i := range slice {
+		data[i] = slice[i][:]
+	}
+
+	return s.WriteSliceOfByteSlices(data, deSeriMode, lenType, arrayRules, errProducer)
 }
 
 // WriteBytes writes the given byte slice to the Serializer.
@@ -738,6 +776,56 @@ func (d *Deserializer) ReadBytes(slice *[]byte, numBytes int, errProducer ErrPro
 	*slice = dest
 
 	d.offset += numBytes
+
+	return d
+}
+
+// ReadSliceOfArraysOf32Bytes reads a slice of arrays of 32 bytes.
+func (d *Deserializer) ReadSliceOfArraysOf32Bytes(slice *SliceOfArraysOf32Bytes, deSeriMode DeSerializationMode, lenType SeriLengthPrefixType, arrayRules *ArrayRules, errProducer ErrProducer) *Deserializer {
+	if d.err != nil {
+		return d
+	}
+	const length = 32
+
+	sliceLength, err := d.readSliceLength(lenType, errProducer)
+	if err != nil {
+		d.err = err
+
+		return d
+	}
+
+	var arrayElementValidator ElementValidationFunc
+	if arrayRules != nil && deSeriMode.HasMode(DeSeriModePerformValidation) {
+		if err := arrayRules.CheckBounds(uint(sliceLength)); err != nil {
+			d.err = errProducer(err)
+
+			return d
+		}
+
+		arrayElementValidator = arrayRules.ElementValidationFunc()
+	}
+
+	s := make(SliceOfArraysOf32Bytes, sliceLength)
+	for i := 0; i < sliceLength; i++ {
+		if len(d.src[d.offset:]) < length {
+			d.err = errProducer(ErrDeserializationNotEnoughData)
+
+			return d
+		}
+
+		if arrayElementValidator != nil {
+			if err := arrayElementValidator(i, d.src[d.offset:d.offset+length]); err != nil {
+				d.err = errProducer(err)
+
+				return d
+			}
+		}
+
+		copy(s[i][:], d.src[d.offset:d.offset+length])
+		d.offset += length
+	}
+
+	*slice = s
 
 	return d
 }
