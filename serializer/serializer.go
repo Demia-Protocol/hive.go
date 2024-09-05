@@ -830,6 +830,26 @@ func (d *Deserializer) ReadSliceOfArraysOf32Bytes(slice *SliceOfArraysOf32Bytes,
 	return d
 }
 
+// ReadArrayOf49Bytes reads an array of 49 bytes.
+func (d *Deserializer) ReadArrayOf49Bytes(arr *ArrayOf49Bytes, errProducer ErrProducer) *Deserializer {
+	if d.err != nil {
+		return d
+	}
+	const length = 49
+
+	l := len(d.src[d.offset:])
+	if l < length {
+		d.err = errProducer(ErrDeserializationNotEnoughData)
+
+		return d
+	}
+
+	copy(arr[:], d.src[d.offset:d.offset+length])
+	d.offset += length
+
+	return d
+}
+
 // ReadBytesInPlace reads slice length amount of bytes into slice.
 // Use this function only to read arrays.
 func (d *Deserializer) ReadBytesInPlace(slice []byte, errProducer ErrProducer) *Deserializer {
