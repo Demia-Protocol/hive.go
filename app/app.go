@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/iotaledger/hive.go/logger"
 	"math"
 	"os"
 	"runtime/debug"
@@ -300,6 +301,12 @@ Command line flags:
 
 	// initialize the root logger
 	loggerRoot, err := NewLoggerFromConfig(loggerConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	//ToDo: Remove this logic
+	err = logger.SetGlobalLogger(logger.NewLogger("App"))
 	if err != nil {
 		panic(err)
 	}
