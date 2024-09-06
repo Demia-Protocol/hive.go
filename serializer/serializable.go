@@ -130,6 +130,8 @@ type ArrayRules struct {
 	Guards SerializableGuard
 	// The mode of validation.
 	ValidationMode ArrayValidationMode
+	// The slice reduction function for uniqueness checks.
+	UniquenessSliceFunc ElementUniquenessSliceFunc
 }
 
 // CheckBounds checks whether the given count violates the array bounds.

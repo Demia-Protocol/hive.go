@@ -60,10 +60,6 @@ func newErrorWithStacktrace(err error, stacktrace string) *errorWithStacktrace {
 // if yes, it simply returns the err.
 // if not, it returns a new error with a stacktrace appended.
 func ensureStacktraceUniqueness(err error) error {
-	if err == nil {
-		return nil
-	}
-
 	var errWithStacktrace *errorWithStacktrace
 	if errors.As(err, &errWithStacktrace) {
 		return err
