@@ -305,11 +305,18 @@ Command line flags:
 		panic(err)
 	}
 
-	//ToDo: Remove this logic
-	err = logger.SetGlobalLogger(logger.NewLogger("App"))
+	//ToDo: Remove this doubled logic
+	rootLogger, err := logger.NewRootLogger(logger.DefaultCfg)
 	if err != nil {
 		panic(err)
 	}
+
+	err = logger.SetGlobalLogger(rootLogger)
+	if err != nil {
+		panic(err)
+	}
+	//
+
 	a.loggerRoot = loggerRoot
 
 	// initialize logger after init phase because components could modify it
